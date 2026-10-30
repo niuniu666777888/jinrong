@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}概览{% endblock %}
+{% block heading %}概览{% endblock %}
+
+{% block content %}
+
+<!-- 四个指标卡：数字大、标签小，一眼能扫完 -->
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-num">{{ stats.docs }}</div>
+    <div class="stat-label">知识库文档</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ stats.chunks }}</div>
+    <div class="stat-label">切片总数</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ stats.messages_today }}</div>
+    <div class="stat-label">今日问答</div>
+  </div>
+  <div class="stat {{ 'stat-warn' if stats.flagged_total else '' }}">
+    <div class="stat-num">{{ stats.flagged_total }}</div>
+    <div class="stat-label">疑似违规标记</div>
+  </div>
+</div>
+
+<div class="two-col">
+
+  <!-- 当前生效的提示词：管理员最常确认的就是"现在跑的是哪一版" -->
+  <section class="card">
+    <div class="card-head">
+      <h2>当前系统提示词</h2>
+      <a href="/admin/prompts" class="btn btn-sm">去修改</a>
+    </div>
+    <div class="card-body">
+      <div class="meta-line">
+        第 <b>{{ prompt.version }}</b> 版 ·
+        最后更新 {{ prompt.updated_at }}
+      </div>
+      <pre class="prompt-preview">{{ prompt.content }}</pre>
+    </div>
+  </section>
+
+  <!-- 最近上传的文档 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>最近文档</h2>
+      <a href="/admin/kb" class="btn btn-sm">全部</a>
+    </div>
+    <div class="card-body">
+      {% if docs %}
+      <ul class="plain-list">
+        {% for d in docs %}
+        <li>
+          <span class="file-name">{{ d.file_name }}</span>
+          <span class="badge {{ 'badge-ok' if d.status == 'indexed' else 'badge-err' }}">
+            {{ '已索引' if d.status == 'indexed' else '失败' }}
+          </span>
+          <span class="muted">{{ d.chunk_count }} 片</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">还没有文档，去知识库页上传第一份制度。</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<!-- 运行状态：出问题时第一个要看的地方 -->
+<section class="card">
+  <div class="card-head"><h2>运行状态</h2></div>
+  <div class="card-body">
+    <div class="kv-grid">
+      <div><span>向量后端</span><b>{{ index.vector_backend or '—' }}</b></div>
+      <div><span>向量维度</span><b>{{ index.dim or '—' }}</b></div>
+      <div><span>文件数</span><b>{{ index.files or 0 }}</b></div>
+      <div><span>切片数</span><b>{{ index.chunks or 0 }}</b></div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

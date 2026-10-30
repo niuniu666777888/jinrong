@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}对话详情{% endblock %}
+{% block heading %}对话详情{% endblock %}
+
+{% block content %}
+
+<div class="two-col">
+  <!-- 左：问答正文 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>问答内容</h2>
+      <a href="/admin/audit" class="btn btn-sm">← 返回列表</a>
+    </div>
+    <div class="card-body">
+      <div class="meta-line">
+        员工：
+        {% if item.employee_name %}
+          <b>{{ item.employee_name }}</b>（{{ item.employee_no }}）
+        {% else %}
+          <span class="muted">匿名（迁移前）</span>
+        {% endif %}
+        · 时间：<b data-ts="{{ item.created_at }}"></b>
+        · 提示词：<b>v{{ item.prompt_version or '—' }}</b>
+        · 模型：{{ item.status }}
+      </div>
+
+      <div class="qa-block">
+        <div class="qa-label">问</div>
+        <div class="qa-text">{{ item.question }}</div>
+      </div>
+
+      <div class="qa-block">
+        <div class="qa-label">答</div>
+        <div class="qa-text">{{ item.content }}</div>
+      </div>
+
+      {% if item.sources %}
+      <div class="src-block">
+        <div class="qa-label">引用条文（{{ item.sources | length }}）</div>
+        {% for s in item.sources %}
+        <div class="src-item">
+          <span class="file">{{ s.file_name }}</span>
+          <span class="loc">第 {{ s.start }}–{{ s.end }} 字 · 匹配度 {{ s.score }}</span>
+          <div class="snip">{{ s.snippet }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- 右：标记面板 -->
+  <section class="card">
+    <div class="card-head"><h2>违规标记</h2></div>
+    <div class="card-body">
+      {% if item.category %}
+      <div class="alert-warn">
+        已标记为<b>{{ categories.get(item.category, item.category) }}</b>
+        {% if item.reason %}<br>原因：{{ item.reason }}{% endif %}
+      </div>
+      <button class="btn btn-ghost btn-block" id="btn-unflag">取消标记</button>
+      {% else %}
+      <p class="hint">
+        标记不会修改原始记录，只额外记一条审计笔记。
+        分类用固定枚举，后续才能做统计。
+      </p>
+      {% endif %}
+
+      <form id="flag-form" class="stack">
+        <label class="field">
+          <span>分类</span>
+          <select name="category" required>
+            <option value="">请选择</option>
+            {% for key, label in categories.items() %}
+            <option value="{{ key }}" {{ 'selected' if item.category == key else '' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label class="field">
+          <span>原因（可选，≤500 字）</span>
+          <textarea name="reason" rows="4" maxlength="500"
+                    placeholder="例如：差旅住宿标准为 500 元/晚，回答按 800 元解释">{{ item.reason or '' }}</textarea>
+        </label>
+
+        <button class="btn btn-primary btn-block" type="submit">
+          {{ '更新标记' if item.category else '标记为疑似违规' }}
+        </button>
+      </form>
+    </div>
+  </section>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MSG_ID = '{{ item.id }}';
+
+document.getElementById('flag-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const category = fd.get('category');
+  if (!category) { toast('请选择分类', 'error'); return; }
+
+  const resp = await fetch(`/api/v1/admin/audit/messages/${MSG_ID}/flag`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, reason: fd.get('reason') || '' }),
+  });
+  const json = await resp.json();
+  if (json.code !== 0) { toast(`[${json.code}] ${json.message}`, 'error'); return; }
+  toast('已标记', 'ok');
+  setTimeout(() => location.reload(), 600);
+});
+
+const unflag = document.getElementById('btn-unflag');
+if (unflag) {
+  unflag.addEventListener('click', async () => {
+    const resp = await fetch(`/api/v1/admin/audit/messages/${MSG_ID}/flag`, { method: 'DELETE' });
+    const json = await resp.json();
+    if (json.code !== 0) { toast(`[${json.code}] ${json.message}`, 'error'); return; }
+    toast('已取消标记', 'ok');
+    setTimeout(() => location.reload(), 600);
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}提示词{% endblock %}
+{% block heading %}提示词模板{% endblock %}
+
+{% block content %}
+
+<section class="card">
+  <div class="card-head">
+    <h2>系统提示词</h2>
+    <span class="muted">当前生效：第 {{ prompt.version }} 版</span>
+  </div>
+
+  <div class="card-body">
+    <p class="hint">
+      这段文字会作为 system 消息发给模型，决定它"怎么答"。资料片段仍由系统拼在用户消息里，
+      模板只描述角色与约束，不要在这里写具体制度条款。
+      保存后<b>下一条提问立即生效</b>，无需重启。
+    </p>
+
+    <textarea id="prompt-editor" class="editor" rows="10"
+              maxlength="4000">{{ prompt.content }}</textarea>
+
+    <div class="editor-foot">
+      <span class="muted"><span id="char-count">0</span> / 4000 字</span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btn-reset">还原为当前生效内容</button>
+        <button class="btn btn-primary" id="btn-save">保存并生效</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 版本历史：回滚入口，同时是审计证据 —— 能查到每一版是谁改的 -->
+<section class="card">
+  <div class="card-head"><h2>版本历史</h2></div>
+  <div class="card-body no-pad">
+    <table class="table">
+      <thead>
+        <tr><th>版本</th><th>修改人</th><th>时间</th><th>内容摘要</th><th class="ta-r">操作</th></tr>
+      </thead>
+      <tbody>
+        {% for v in versions %}
+        <tr>
+          <td><span class="badge {{ 'badge-ok' if v.version == prompt.version else '' }}">v{{ v.version }}</span></td>
+          <td>{{ v.author_name or v.created_by or '系统' }}</td>
+          <td class="muted" data-ts="{{ v.created_at }}"></td>
+          <td class="ellipsis" title="{{ v.content }}">{{ v.content[:60] }}</td>
+          <td class="ta-r">
+            {% if v.version != prompt.version %}
+            <button class="btn btn-sm js-rollback" data-version="{{ v.version }}">回滚到这一版</button>
+            {% else %}
+            <span class="muted">当前版本</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const editor = document.getElementById('prompt-editor');
+const counter = document.getElementById('char-count');
+const ORIGINAL = editor.value;
+
+function syncCount() { counter.textContent = editor.value.length; }
+editor.addEventListener('input', syncCount);
+syncCount();
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  editor.value = ORIGINAL;
+  syncCount();
+});
+
+document.getElementById('btn-save').addEventListener('click', async (e) => {
+  const content = editor.value.trim();
+  if (!content) { toast('提示词不能为空', 'error'); return; }
+
+  e.target.disabled = true;
+  try {
+    const resp = await fetch('/api/v1/admin/prompts/{{ prompt.id }}', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    const json = await resp.json();
+    if (json.code !== 0) { toast(`[${json.code}] ${json.message}`, 'error'); return; }
+    toast(json.message, 'ok');
+    setTimeout(() => location.reload(), 800);
+  } catch (err) {
+    toast('保存失败：' + err.message, 'error');
+  } finally {
+    e.target.disabled = false;
+  }
+});
+
+document.querySelectorAll('.js-rollback').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const version = btn.dataset.version;
+    if (!confirm(`回滚到第 ${version} 版？\n当前内容会作为一个新版本保留，历史不会丢。`)) return;
+
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/api/v1/admin/prompts/{{ prompt.id }}/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: Number(version) }),
+      });
+      const json = await resp.json();
+      if (json.code !== 0) { toast(`[${json.code}] ${json.message}`, 'error'); btn.disabled = false; return; }
+      toast(json.message, 'ok');
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      toast('回滚失败：' + err.message, 'error');
+      btn.disabled = false;
+    }
+  });
+});
+</script>
+{% endblock %}

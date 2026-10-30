@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 · 制度助手</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="login-body">
+
+<div class="login-card">
+  <div class="login-brand">
+    <div class="logo">制</div>
+    <div>
+      <h1>制度助手</h1>
+      <p>支付对账与差错追踪 · 内部系统</p>
+    </div>
+  </div>
+
+  {# 错误提示：服务端渲染，不依赖 JS，登录失败也能看见 #}
+  {% if error %}
+  <div class="alert-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/login" autocomplete="off">
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <label class="field">
+      <span>工号</span>
+      <input type="text" name="employee_no" placeholder="例如 admin"
+             required autofocus value="">
+    </label>
+
+    <label class="field">
+      <span>密码</span>
+      <input type="password" name="password" placeholder="请输入密码" required>
+    </label>
+
+    <button type="submit" class="btn btn-primary btn-block">登 录</button>
+  </form>
+
+  <p class="login-tip">
+    员工登录后进入问答页，管理员登录后进入管理后台。<br>
+    忘记密码请联系系统管理员重置。
+  </p>
+</div>
+
+</body>
+</html>

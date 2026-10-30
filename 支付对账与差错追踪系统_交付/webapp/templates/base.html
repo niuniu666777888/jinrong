@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}管理后台{% endblock %} · 制度助手</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- 左侧导航：固定宽度，移动端会收成横向条（见 CSS 媒体查询） -->
+  <aside class="sidebar">
+    <div class="brand">制度助手<span>ADMIN</span></div>
+    <nav>
+      <a href="/admin" class="nav-item {{ 'active' if active == 'dashboard' else '' }}">概览</a>
+      <a href="/admin/kb" class="nav-item {{ 'active' if active == 'kb' else '' }}">知识库</a>
+      <a href="/admin/prompts" class="nav-item {{ 'active' if active == 'prompts' else '' }}">提示词</a>
+      <a href="/admin/audit" class="nav-item {{ 'active' if active == 'audit' else '' }}">对话审计</a>
+    </nav>
+    <div class="side-foot"><a href="/">← 返回问答页</a></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1>{% block heading %}{% endblock %}</h1>
+      <div class="who">
+        <span class="who-name">{{ user.name }}</span>
+        <span class="role-tag">{{ '管理员' if user.role == 'admin' else '员工' }}</span>
+        <a class="logout" href="/logout">退出</a>
+      </div>
+    </header>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/static/admin.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

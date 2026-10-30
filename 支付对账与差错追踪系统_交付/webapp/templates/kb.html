@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}知识库{% endblock %}
+{% block heading %}知识库管理{% endblock %}
+
+{% block content %}
+
+<!-- 上传区：拖拽与点击都行；进度用进度条 + 文本双表达，避免只有动画没有数字 -->
+<section class="card">
+  <div class="card-head">
+    <h2>上传制度文档</h2>
+    <span class="muted">支持 md / txt / pdf，单文件 ≤ 20 MB</span>
+  </div>
+  <div class="card-body">
+    <div id="dropzone" class="dropzone">
+      <div class="dz-icon">↑</div>
+      <div class="dz-main">把文件拖到这里，或 <span class="link">点击选择</span></div>
+      <div class="dz-hint">上传后自动切片、向量化并重建索引，几秒内可被检索到</div>
+      <input type="file" id="file-input" accept=".md,.txt,.pdf" hidden>
+    </div>
+
+    <div id="upload-progress" class="progress-wrap" hidden>
+      <div class="progress-text">正在解析并建立索引…</div>
+      <div class="progress-bar"><i></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- 列表 -->
+<section class="card">
+  <div class="card-head">
+    <h2>文档列表 <span class="muted">（共 {{ total }} 份）</span></h2>
+    <form method="get" class="inline-form">
+      <input type="text" name="keyword" value="{{ keyword }}" placeholder="按文件名搜索">
+      <button class="btn btn-sm" type="submit">搜索</button>
+      <button class="btn btn-sm btn-ghost" type="button" id="btn-reindex">重建索引</button>
+    </form>
+  </div>
+
+  <div class="card-body no-pad">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>文件名</th><th>类型</th><th>切片</th><th>状态</th>
+          <th>上传人</th><th>时间</th><th class="ta-r">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in docs %}
+        <tr>
+          <td class="ellipsis" title="{{ d.file_name }}">{{ d.file_name }}</td>
+          <td><span class="badge">{{ d.file_type }}</span></td>
+          <td>{{ d.chunk_count }}</td>
+          <td>
+            {% if d.status == 'indexed' %}
+              <span class="badge badge-ok">已索引</span>
+            {% elif d.status == 'indexing' %}
+              <span class="badge badge-warn">处理中</span>
+            {% else %}
+              <span class="badge badge-err" title="{{ d.error_msg }}">失败</span>
+            {% endif %}
+          </td>
+          <td class="muted">{{ d.uploader_name or '系统导入' }}</td>
+          <td class="muted" data-ts="{{ d.created_at }}"></td>
+          <td class="ta-r">
+            <button class="btn btn-sm btn-danger js-del"
+                    data-id="{{ d.id }}" data-name="{{ d.file_name }}">删除</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">暂无文档</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pages > 1 %}
+  <div class="pager">
+    {% for i in range(1, pages + 1) %}
+    <a href="?keyword={{ keyword }}&page={{ i }}"
+       class="page {{ 'active' if i == page else '' }}">{{ i }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* 上传与删除的交互逻辑都放这里，页面结构保持干净 */
+
+const dz = document.getElementById('dropzone');
+const input = document.getElementById('file-input');
+const prog = document.getElementById('upload-progress');
+
+function pick() { input.click(); }
+dz.addEventListener('click', pick);
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dz.classList.remove('over');
+  if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+});
+input.addEventListener('change', () => {
+  if (input.files.length) upload(input.files[0]);
+});
+
+async function upload(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['md', 'txt', 'pdf'].includes(ext)) {
+    toast('只支持 md / txt / pdf', 'error');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    toast('文件超过 20 MB', 'error');
+    return;
+  }
+
+  prog.hidden = false;
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const resp = await fetch('/api/v1/admin/kb/upload', { method: 'POST', body: fd });
+    const json = await resp.json();
+    if (json.code !== 0) {
+      toast(`[${json.code}] ${json.message}`, 'error');
+      return;
+    }
+    toast(`《${json.data.file_name}》已入库，${json.data.chunks} 个切片`, 'ok');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) {
+    toast('上传失败：' + e.message, 'error');
+  } finally {
+    prog.hidden = true;
+    input.value = '';
+  }
+}
+
+/* 删除：二次确认里带文件名，避免删错 */
+document.querySelectorAll('.js-del').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const { id, name } = btn.dataset;
+    if (!confirm(`确定删除《${name}》？\n切片会一并移除，已引用它的历史回答不受影响。`)) return;
+
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/api/v1/admin/kb/docs/${id}`, { method: 'DELETE' });
+      const json = await resp.json();
+      if (json.code !== 0) {
+        toast(`[${json.code}] ${json.message}`, 'error');
+        btn.disabled = false;
+        return;
+      }
+      toast('已删除', 'ok');
+      setTimeout(() => location.reload(), 500);
+    } catch (e) {
+      toast('删除失败：' + e.message, 'error');
+      btn.disabled = false;
+    }
+  });
+});
+
+document.getElementById('btn-reindex').addEventListener('click', async (e) => {
+  e.target.disabled = true;
+  e.target.textContent = '重建中…';
+  try {
+    const resp = await fetch('/api/v1/admin/kb/reindex', { method: 'POST' });
+    const json = await resp.json();
+    toast(json.code === 0
+      ? `重建完成：${json.data.chunks} 个切片`
+      : `[${json.code}] ${json.message}`, json.code === 0 ? 'ok' : 'error');
+  } catch (err) {
+    toast('重建失败：' + err.message, 'error');
+  } finally {
+    e.target.disabled = false;
+    e.target.textContent = '重建索引';
+  }
+});
+</script>
+{% endblock %}

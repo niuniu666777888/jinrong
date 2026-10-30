@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支付对账制度助手</title>
+<style>
+  /* ===== 基础排版：中文优先，行高放宽，避免密集文字压迫感 ===== */
+  * { box-sizing: border-box; }
+  :root {
+    --navy: #1f3864;
+    --navy-light: #2f4f7f;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --line: #e3e8ef;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --danger: #a61b1b;
+    --danger-bg: #fdecea;
+    --ok: #1e6b43;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* ===== 顶部：标题 + 新建对话 ===== */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--navy);
+    color: #fff;
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(31, 56, 100, .18);
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .3px; }
+  header .hint { font-size: 12px; opacity: .72; margin-left: 10px; font-weight: 400; }
+  header button {
+    background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.28);
+    border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  header button:hover { background: rgba(255,255,255,.24); }
+
+  /* ===== 消息区 ===== */
+  main {
+    max-width: 860px; margin: 0 auto;
+    padding: 22px 16px 190px;    /* 底部留白给输入区，避免最后一条被挡住 */
+  }
+  .msg { display: flex; margin-bottom: 18px; gap: 10px; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 30px; height: 30px; flex: 0 0 30px;
+    border-radius: 8px; display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; color: #fff;
+  }
+  .msg.assistant .avatar { background: var(--navy); }
+  .msg.user .avatar { background: #8ba3c7; }
+
+  .bubble {
+    max-width: 78%;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    white-space: pre-wrap;      /* 保留换行，不解析 markdown，避免 XSS */
+    word-break: break-word;
+  }
+  .msg.user .bubble { background: #eaf0fa; border-color: #d5e0f2; }
+
+  /* 打字机光标 */
+  .cursor {
+    display: inline-block; width: 7px; height: 15px;
+    background: var(--navy-light); vertical-align: -2px;
+    margin-left: 2px; animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* 检索/生成状态 */
+  .status { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .status .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--navy-light); margin-right: 6px;
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+
+  /* 引用区 */
+  details.sources {
+    margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  details.sources summary { cursor: pointer; user-select: none; outline: none; }
+  details.sources summary::marker { color: var(--navy-light); }
+  details.sources ol { margin: 8px 0 0; padding-left: 20px; }
+  details.sources li { margin-bottom: 8px; }
+  details.sources .file { color: var(--navy); font-weight: 600; }
+  details.sources .loc { color: #98a2b3; margin-left: 6px; font-size: 11.5px; }
+  details.sources .snip { display: block; color: #4b5563; margin-top: 2px; }
+  details.sources button {
+    margin-top: 4px; background: none; border: 1px solid var(--line);
+    color: var(--muted); border-radius: 4px; padding: 1px 8px;
+    font-size: 11.5px; cursor: pointer; font-family: inherit;
+  }
+  details.sources button:hover { border-color: var(--navy-light); color: var(--navy); }
+
+  /* 错误态 */
+  .err {
+    border: 1px solid #f3c9c4; background: var(--danger-bg);
+    border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--danger);
+  }
+  .err .code { font-family: Consolas, monospace; font-size: 11.5px; opacity: .8; }
+  .err button {
+    margin-top: 8px; background: #fff; border: 1px solid #e3b3ad; color: var(--danger);
+    border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+
+  /* ===== 输入区 ===== */
+  .composer {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to top, var(--bg) 72%, rgba(244,246,249,0));
+    padding: 14px 16px 18px;
+    z-index: 9;
+  }
+  .composer-inner {
+    max-width: 860px; margin: 0 auto;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px;
+    box-shadow: 0 6px 20px rgba(31,56,100,.08);
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+  textarea {
+    flex: 1; border: none; outline: none; resize: none;
+    font-family: inherit; font-size: 14px; line-height: 1.6;
+    max-height: 120px; min-height: 26px; padding: 4px 2px;
+    background: transparent; color: var(--text);
+  }
+  textarea::placeholder { color: #a8b3c4; }
+  .btn-send {
+    background: var(--navy); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 18px; font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: background .15s;
+  }
+  .btn-send:disabled { background: #b9c4d6; cursor: not-allowed; }
+  .btn-send:not(:disabled):hover { background: var(--navy-light); }
+  .btn-stop {
+    background: #fff; color: var(--danger); border: 1px solid #e3b3ad;
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+    font-family: inherit; display: none;
+  }
+  .footnote {
+    max-width: 860px; margin: 8px auto 0; text-align: center;
+    font-size: 11.5px; color: #9aa5b4;
+  }
+
+  /* ===== 原文弹窗 ===== */
+  .modal {
+    position: fixed; inset: 0; background: rgba(15,23,42,.45);
+    display: none; place-items: center; z-index: 30; padding: 24px;
+  }
+  .modal.show { display: grid; }
+  .modal-box {
+    background: #fff; border-radius: 12px; max-width: 720px; width: 100%;
+    max-height: 76vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-head {
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; color: var(--navy); font-size: 13.5px;
+  }
+  .modal-head button {
+    background: none; border: none; font-size: 18px; cursor: pointer; color: var(--muted);
+    line-height: 1;
+  }
+  .modal-body {
+    padding: 16px; overflow: auto; white-space: pre-wrap; font-size: 13px;
+    color: #374151; line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1 style="display:inline">支付对账制度助手</h1>
+    <span class="hint">基于制度文档回答，不替代财务审核</span>
+  </div>
+  <button id="btn-new">新建对话</button>
+</header>
+
+<main id="messages"></main>
+
+<div class="composer">
+  <div class="composer-inner">
+    <textarea id="input" rows="1"
+      placeholder="例如：长款和短款有什么区别？（Enter 发送，Shift+Enter 换行）"></textarea>
+    <button class="btn-send" id="btn-send">发送</button>
+    <button class="btn-stop" id="btn-stop">停止</button>
+  </div>
+  <div class="footnote">回答由模型生成，请以制度原文为准；重要结论请联系财务共享中心确认。</div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="modal-title">制度原文</span>
+      <button id="modal-close">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   员工问答前端
+   ----------------------------------------------------------------------------
+   三个关键点：
+   1. 用 fetch + ReadableStream 读 SSE，不能用 EventSource——
+      EventSource 只支持 GET，而我们的接口是 POST。
+   2. TCP 会把一帧切开，必须自己维护 buffer，按 "\n\n" 切帧。
+   3. 状态机：idle → retrieving → generating → idle / error。
+============================================================================ */
+
+const $ = (id) => document.getElementById(id);
+const messagesEl = $('messages');
+const inputEl = $('input');
+const sendBtn = $('btn-send');
+const stopBtn = $('btn-stop');
+
+/* 会话 ID：存在 localStorage，刷新不变；点"新建对话"才换 */
+let sessionId = localStorage.getItem('chat_session_id');
+if (!sessionId) {
+  sessionId = 's_' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+  localStorage.setItem('chat_session_id', sessionId);
+}
+
+/* 运行时状态 */
+let controller = null;      // AbortController，用于"停止"
+let streaming = false;
+
+/* ---------------------------------------------------------------- 工具函数 */
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function scrollToBottom() {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+/* ------------------------------------------------------------ 渲染一条消息 */
+function addUserMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.innerHTML = `<div class="avatar">我</div>
+                   <div class="bubble">${escapeHtml(text)}</div>`;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+}
+
+/**
+ * 创建助手气泡，返回操作句柄。
+ * 用句柄而不是反复 querySelector，避免同一页多条回答时抓错节点。
+ */
+function addAssistantMessage() {
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `
+    <div class="avatar">AI</div>
+    <div class="bubble">
+      <span class="answer"></span><span class="cursor"></span>
+      <div class="status"><span class="dot"></span><span class="status-text">正在检索制度…</span></div>
+      <div class="sources-slot"></div>
+    </div>`;
+  messagesEl.appendChild(div);
+
+  const bubble = div.querySelector('.bubble');
+  return {
+    answerEl: div.querySelector('.answer'),
+    cursorEl: div.querySelector('.cursor'),
+    statusEl: div.querySelector('.status'),
+    statusTextEl: div.querySelector('.status-text'),
+    sourcesSlot: div.querySelector('.sources-slot'),
+    bubbleEl: bubble,
+    text: '',                       // 累积的完整回答
+    sources: [],                    // 引用先缓存，done 后再渲染
+  };
+}
+
+/* 把累积文本写回答案区（模板字符串整体替换，保证光标始终在末尾） */
+function renderAnswer(h) {
+  h.answerEl.textContent = h.text;
+}
+
+function setStatus(h, text) {
+  if (text) {
+    h.statusTextEl.textContent = text;
+    h.statusEl.style.display = '';
+  } else {
+    h.statusEl.style.display = 'none';
+  }
+}
+
+/* 渲染引用区：默认折叠，避免长列表喧宾夺主 */
+function renderSources(h) {
+  if (!h.sources || h.sources.length === 0) return;
+  const items = h.sources.map((s) => `
+    <li>
+      <span class="file">${escapeHtml(s.file_name)}</span>
+      <span class="loc">第 ${s.start}–${s.end} 字 · 匹配度 ${s.score}</span>
+      <span class="snip">${escapeHtml(s.snippet)}</span>
+      <button data-chunk="${escapeHtml(s.chunk_id)}">查看原文</button>
+    </li>`).join('');
+
+  h.sourcesSlot.innerHTML = `
+    <details class="sources">
+      <summary>制度来源（${h.sources.length}）</summary>
+      <ol>${items}</ol>
+    </details>`;
+
+  // 事件委托：弹窗里再 fetch 原文，不跳页、不丢对话
+  h.sourcesSlot.querySelectorAll('button[data-chunk]').forEach((btn) => {
+    btn.addEventListener('click', () => showSource(btn.dataset.chunk));
+  });
+}
+
+/* 错误块 + 重试 */
+function renderError(h, code, message, retryText) {
+  h.cursorEl.remove();
+  setStatus(h, '');
+  h.bubbleEl.insertAdjacentHTML('beforeend', `
+    <div class="err">
+      <div>${escapeHtml(message)}</div>
+      <div class="code">错误码 ${code}</div>
+      <button type="button">重试</button>
+    </div>`);
+  const btn = h.bubbleEl.querySelector('.err button');
+  if (btn) btn.addEventListener('click', () => {
+    h.bubbleEl.querySelector('.err').remove();
+    send(retryText, true);
+  });
+}
+
+/* 原文弹窗 */
+async function showSource(chunkId) {
+  const modal = $('modal');
+  $('modal-title').textContent = '制度原文';
+  $('modal-body').textContent = '加载中…';
+  modal.classList.add('show');
+  try {
+    const resp = await fetch(`/api/v1/sources/${encodeURIComponent(chunkId)}`);
+    const json = await resp.json();
+    if (json.code !== 0) {
+      $('modal-body').textContent = `[${json.code}] ${json.message}`;
+      return;
+    }
+    const d = json.data;
+    $('modal-title').textContent = `${d.file_name} · 第 ${d.start}–${d.end} 字`;
+    $('modal-body').textContent = d.content;
+  } catch (e) {
+    $('modal-body').textContent = '加载失败：' + e.message;
+  }
+}
+$('modal-close').addEventListener('click', () => $('modal').classList.remove('show'));
+$('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') $('modal').classList.remove('show');
+});
+
+/* ------------------------------------------------------------ SSE 帧解析 */
+function parseFrame(frame) {
+  // 一帧形如：
+  //   event: delta
+  //   data: {"text":"根据"}
+  let event = 'message';
+  const dataLines = [];
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join('\n')) };
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------- 发送 */
+async function send(text, isRetry = false) {
+  const question = (text || inputEl.value).trim();
+  if (!question || streaming) return;
+
+  if (!isRetry) {
+    addUserMessage(question);
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+  }
+
+  const h = addAssistantMessage();
+  streaming = true;
+  sendBtn.disabled = true;
+  stopBtn.style.display = '';
+  controller = new AbortController();
+  scrollToBottom();
+
+  let done = false;
+
+  try {
+    const resp = await fetch('/api/v1/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, question }),
+      signal: controller.signal,
+    });
+
+    // 流没开始就失败：此时服务端返回的是正常 JSON，HTTP 状态码有意义
+    if (!resp.ok) {
+      let msg = `请求失败（HTTP ${resp.status}）`, code = resp.status;
+      try {
+        const j = await resp.json();
+        msg = j.message || msg;
+        code = j.code ?? code;
+      } catch { /* 响应不是 JSON 就保留默认文案 */ }
+      renderError(h, code, msg, question);
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按空行切帧；最后一帧可能不完整，留在 buffer 里等下一批数据
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const evt = parseFrame(frame);
+        if (!evt) continue;
+
+        switch (evt.event) {
+          case 'meta':
+            // 拿到服务端确认的 message_id 后可以留作埋点用，这里先忽略
+            break;
+
+          case 'status':
+            setStatus(h, evt.data.text || '');
+            break;
+
+          case 'sources':
+            // 引用先缓存：它比回答先到，但必须显示在回答下面
+            h.sources = evt.data.items || [];
+            break;
+
+          case 'delta':
+            // 真流式：来一段写一段，不用定时器模拟打字
+            h.text += evt.data.text || '';
+            renderAnswer(h);
+            scrollToBottom();
+            break;
+
+          case 'done':
+            done = true;
+            setStatus(h, '');
+            h.cursorEl.remove();
+            renderSources(h);
+            if (evt.data.degraded) {
+              h.bubbleEl.insertAdjacentHTML('beforeend',
+                '<div class="status">未检索到相关制度，已给出兜底提示。</div>');
+            }
+            break;
+
+          case 'error':
+            done = true;
+            renderError(h, evt.data.code, evt.data.message || '服务异常', question);
+            break;
+        }
+      }
+    }
+
+    if (!done && !h.text) {
+      renderError(h, 'NETWORK', '连接中断，未收到任何内容', question);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      // 用户主动停止：保留已生成内容，标记一下
+      h.cursorEl.remove();
+      setStatus(h, '已停止生成');
+      if (h.text) renderSources(h);
+    } else {
+      renderError(h, 'NETWORK', '网络异常：' + e.message, question);
+    }
+  } finally {
+    streaming = false;
+    sendBtn.disabled = false;
+    stopBtn.style.display = 'none';
+    controller = null;
+    inputEl.focus();
+  }
+}
+
+/* --------------------------------------------------------------- 历史恢复 */
+async function loadHistory() {
+  try {
+    const resp = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
+    if (!resp.ok) return;          // 404 = 新会话，没什么可恢复的
+    const json = await resp.json();
+    if (json.code !== 0 || !json.data.messages.length) return;
+
+    for (const m of json.data.messages) {
+      if (m.role === 'user') {
+        addUserMessage(m.content);
+      } else {
+        const h = addAssistantMessage();
+        h.text = m.content;
+        renderAnswer(h);
+        h.cursorEl.remove();
+        setStatus(h, m.status === 'aborted' ? '（生成中断，仅保留部分内容）' : '');
+        h.sources = m.sources || [];
+        renderSources(h);
+      }
+    }
+    scrollToBottom();
+  } catch {
+    /* 恢复失败不影响新提问 */
+  }
+}
+
+/* ------------------------------------------------------------------ 事件 */
+function autoGrow() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+}
+
+inputEl.addEventListener('input', autoGrow);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    send();
+  }
+});
+sendBtn.addEventListener('click', () => send());
+stopBtn.addEventListener('click', () => {
+  if (controller) controller.abort();
+});
+
+$('btn-new').addEventListener('click', () => {
+  if (streaming && controller) controller.abort();
+  sessionId = 's_' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+  localStorage.setItem('chat_session_id', sessionId);
+  messagesEl.innerHTML = '';
+  inputEl.focus();
+});
+
+loadHistory();
+inputEl.focus();
+</script>
+</body>
+</html>
