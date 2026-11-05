@@ -372,9 +372,16 @@ async def api_upload(request: Request, file: UploadFile = File(...)):
         raise BizError(CODE_BAD_FILE_TYPE,
                        f"不支持的文件类型 {ext or '（无扩展名）'}，仅支持 md / txt / pdf", 400)
 
-    raw = await file.read()
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise BizError(CODE_FILE_TOO_LARGE, "文件超过 20 MB，请拆分后再上传", 413)
+    # 分块读取，超过上限立刻停止，避免“先读进 20MB 再判断”造成内存浪费。
+    raw = bytearray()
+    while True:
+        piece = await file.read(1024 * 1024)
+        if not piece:
+            break
+        raw.extend(piece)
+        if len(raw) > MAX_UPLOAD_BYTES:
+            raise BizError(CODE_FILE_TOO_LARGE, "文件超过 20 MB，请拆分后再上传", 413)
+    raw = bytes(raw)
     if not raw.strip():
         raise BizError(CODE_PARSE_FAILED, "文件内容为空", 422)
 
