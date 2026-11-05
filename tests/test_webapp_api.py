@@ -93,3 +93,20 @@ def test_chat_streams_events_and_finishes(client):
     body = response.text
     assert "event: meta" in body
     assert "event: done" in body
+
+    report = client.post(
+        "/api/v1/reports/session",
+        json={"session_id": session_id, "format": "md"},
+    )
+    assert report.status_code == 200
+    assert report.headers["content-type"].startswith("text/markdown")
+    assert "支付对账制度问答报告" in report.text
+    assert "差错分哪几类" in report.text
+
+    csv_report = client.post(
+        "/api/v1/reports/session",
+        json={"session_id": session_id, "format": "csv"},
+    )
+    assert csv_report.status_code == 200
+    assert csv_report.headers["content-type"].startswith("text/csv")
+    assert "序号,角色,时间,内容,参考制度" in csv_report.text

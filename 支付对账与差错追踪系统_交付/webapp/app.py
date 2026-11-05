@@ -28,7 +28,9 @@ webapp/app.py —— 员工问答入口 + 管理后台（FastAPI）
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import os
 import sys
@@ -41,7 +43,9 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -344,6 +348,11 @@ class SessionIn(BaseModel):
     employee_id: Optional[str] = Field(None, max_length=32)
 
 
+class ReportIn(BaseModel):
+    session_id: str = Field(..., min_length=8, max_length=64)
+    format: str = Field("md", pattern="^(md|csv)$")
+
+
 # ==============================================================================
 # 提示词组装
 # ==============================================================================
@@ -473,6 +482,125 @@ async def get_source(chunk_id: str, request: Request) -> Dict[str, Any]:
     if not chunk:
         raise BizError(CODE_NO_SESSION, "该条文不存在，可能知识库已更新", 404)
     return {"code": CODE_OK, "message": "ok", "data": chunk, "trace_id": trace_of(request)}
+
+
+def _fmt_report_time(ms: int) -> str:
+    try:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ms / 1000))
+    except (TypeError, ValueError, OSError):
+        return ""
+
+
+def _report_pairs(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把消息流整理成「一问一答」；孤立的助手消息也保留。"""
+    pairs: List[Dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role")
+        if role == "user":
+            pairs.append({"question": message, "answer": None})
+        elif role == "assistant":
+            if pairs and pairs[-1]["answer"] is None:
+                pairs[-1]["answer"] = message
+            else:
+                pairs.append({"question": None, "answer": message})
+    return pairs
+
+
+@app.post("/api/v1/reports/session")
+async def report_session(body: ReportIn, request: Request):
+    """
+    一键生成当前会话的问答报表：Markdown（可读）或 CSV（可进 Excel）。
+    """
+    user = auth.require_login(request)
+    session = db.get_session(body.session_id)
+    if not session:
+        raise BizError(CODE_NO_SESSION, "会话不存在或已被清理", 404)
+
+    owner = session.get("employee_id")
+    if owner and owner != user["id"] and user["role"] != "admin":
+        raise BizError(CODE_NO_SESSION, "会话不存在或已被清理", 404)
+
+    messages = db.list_messages(body.session_id, limit=500)
+    if not messages:
+        raise BizError(CODE_BAD_PARAM, "当前会话还没有问答，先提一个问题再生成报表", 400)
+
+    pairs = _report_pairs(messages)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    now_text = time.strftime("%Y-%m-%d %H:%M:%S")
+    reporter = f"{user.get('name', '')}（{user.get('employee_no', '')}）"
+
+    if body.format == "csv":
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["序号", "角色", "时间", "内容", "参考制度"])
+        for index, message in enumerate(messages, 1):
+            sources = "; ".join(
+                f"{s.get('file_name', '')}（第 {s.get('start')}–{s.get('end')} 字）"
+                for s in (message.get("sources") or [])
+            )
+            writer.writerow([
+                index,
+                "用户" if message.get("role") == "user" else "助手",
+                _fmt_report_time(message.get("created_at", 0)),
+                message.get("content", ""),
+                sources,
+            ])
+        content = "\ufeff" + buffer.getvalue()
+        media_type = "text/csv; charset=utf-8"
+        suffix = "csv"
+    else:
+        lines = [
+            "# 支付对账制度问答报告",
+            "",
+            f"- **生成时间**：{now_text}",
+            f"- **会话编号**：`{body.session_id}`",
+            f"- **提问人**：{reporter}",
+            f"- **问答轮数**：{len(pairs)}",
+            "",
+            "---",
+            "",
+        ]
+        for index, pair in enumerate(pairs, 1):
+            question = pair.get("question")
+            answer = pair.get("answer")
+            lines.append(f"## {index}. {question.get('content', '') if question else '（无对应问题）'}")
+            lines.append("")
+            if question:
+                lines.append(f"**提问时间**：{_fmt_report_time(question.get('created_at', 0))}")
+                lines.append("")
+            if answer:
+                status = answer.get("status")
+                if status and status not in ("ok", "streaming"):
+                    lines.append(f"> 回答状态：{status}")
+                    lines.append("")
+                lines.append(answer.get("content", "") or "（无内容）")
+                sources = answer.get("sources") or []
+                if sources:
+                    lines.append("")
+                    lines.append("**参考制度**：")
+                    for source in sources:
+                        lines.append(
+                            f"- {source.get('file_name', '')}（第 {source.get('start')}–"
+                            f"{source.get('end')} 字，匹配度 {source.get('score')}）"
+                        )
+            else:
+                lines.append("（本次提问没有生成回答）")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+        content = "\n".join(lines)
+        media_type = "text/markdown; charset=utf-8"
+        suffix = "md"
+
+    filename = f"reconciliation_qa_report_{stamp}.{suffix}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/api/v1/chat")

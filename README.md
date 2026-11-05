@@ -142,7 +142,7 @@ pytest
 - `qa_prototype.py`：中英文分词、Markdown 切片与偏移、查询清洗、BM25 排序、Prompt 组装。
 - `webapp/db.py`：SQLite 初始化、会话创建与读取。
 - `webapp/errors.py`：统一错误体、`BizError` 的 code/message/http_status。
-- `webapp/app.py`：健康检查、登录、会话归属校验、SSE 问答主流程（FastAPI `TestClient`）。
+- `webapp/app.py`：健康检查、登录、会话归属校验、SSE 问答主流程和一键报表（FastAPI `TestClient`）。
 
 GitHub Actions 会在 push / pull request 时自动运行 `pytest`。
 
@@ -152,6 +152,7 @@ GitHub Actions 会在 push / pull request 时自动运行 `pytest`。
 |---|---|---|
 | POST | `/api/v1/chat` | 提问，SSE 流式返回（需登录） |
 | GET | `/api/v1/sessions/{sid}/messages` | 拉取历史消息 |
+| POST | `/api/v1/reports/session` | 一键生成当前会话报表（Markdown / CSV） |
 | POST | `/api/v1/sessions` | 新建会话 |
 | GET | `/api/v1/sources/{chunk_id}` | 查看条文原文 |
 | GET | `/api/v1/health` | 健康检查 |

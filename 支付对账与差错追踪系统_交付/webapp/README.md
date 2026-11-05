@@ -43,6 +43,7 @@ set LLM_MODEL=deepseek-chat
 |---|---|---|
 | POST | `/api/v1/chat` | 提问，返回 SSE |
 | GET | `/api/v1/sessions/{sid}/messages` | 拉历史（刷新恢复） |
+| POST | `/api/v1/reports/session` | 生成当前会话报表（Markdown / CSV） |
 | POST | `/api/v1/sessions` | 新建会话 |
 | GET | `/api/v1/sources/{chunk_id}` | 查看条文原文 |
 | GET | `/api/v1/health` | 健康检查 |
