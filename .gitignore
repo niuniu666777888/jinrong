@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+.jwt_secret
+*.pem
+*.key
+
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+backups/
+client/client_state.json
+_ui_crop.png
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
