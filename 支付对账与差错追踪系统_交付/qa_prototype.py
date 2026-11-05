@@ -456,6 +456,10 @@ class BM25:
     # ------------------------------------------------------------------
     def fit(self, corpus_tokens: List[List[str]]) -> "BM25":
         """建索引：统计词频、文档频率、平均长度、IDF。"""
+        # 允许同一个实例重复 fit：先清空旧索引，避免文档被重复累加。
+        self.doc_freqs = []
+        self.doc_len = []
+        self.idf = {}
         self.n_docs = len(corpus_tokens)
         df: Dict[str, int] = {}
 
