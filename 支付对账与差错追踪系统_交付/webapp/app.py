@@ -400,8 +400,8 @@ def make_snippet(text: str, limit: int = 80) -> str:
     return flat[:limit] + ("…" if len(flat) > limit else "")
 
 
-def hit_to_source(hit: Dict[str, Any]) -> Dict[str, Any]:
-    chunk = STATE["chunks"][hit["id"]]
+def hit_to_source(hit: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    chunk = chunks[hit["id"]]
     return {
         "chunk_id": chunk["chunk_id"],
         "file_name": chunk["file_name"],
@@ -438,7 +438,9 @@ async def health(request: Request) -> Dict[str, Any]:
 @app.post("/api/v1/sessions")
 async def create_session(body: SessionIn, request: Request) -> Dict[str, Any]:
     user = auth.require_login(request)
-    session = db.create_session(body.employee_id or user["id"])
+    # employee_id 只允许管理员代为指定；普通员工只能创建自己的会话。
+    owner_id = body.employee_id if user["role"] == "admin" and body.employee_id else user["id"]
+    session = db.create_session(owner_id)
     return {"code": CODE_OK, "message": "ok", "data": session, "trace_id": trace_of(request)}
 
 
@@ -483,7 +485,15 @@ async def chat(body: ChatIn, request: Request):
     user = auth.require_login(request)
     check_rate_limit(user["id"])
 
-    if not STATE["ready"]:
+    # 检索器和切片元数据必须来自同一份快照：重建索引期间如果分别读取，
+    # 可能出现“用旧检索器查到的 id 去新 chunks 里取元数据”的错位。
+    with _INDEX_LOCK:
+        ready = STATE["ready"]
+        retriever = STATE["retriever"]
+        chunks = list(STATE["chunks"])
+        prompt = dict(STATE["prompt"])
+
+    if not ready or retriever is None:
         raise BizError(CODE_NOT_READY, "知识库尚未就绪，请稍后重试", 503)
 
     question = body.question.strip()
@@ -492,12 +502,17 @@ async def chat(body: ChatIn, request: Request):
     if len(question) > 500:
         raise BizError(CODE_EMPTY_QUESTION, "问题过长，请控制在 500 字以内", 400)
 
-    # 会话：不存在就建；已存在但没绑定员工（迁移前的匿名会话）就补上归属
+    # 会话：不存在就建；已存在但没绑定员工（迁移前的匿名会话）就补上归属；
+    # 已绑定其他员工时必须拒绝，否则知道 session_id 就能往别人的会话里写消息。
     session = db.get_session(body.session_id)
     if not session:
         db.ensure_session(body.session_id, user["id"])
-    elif not session.get("employee_id"):
-        db.bind_session(body.session_id, user["id"])
+    else:
+        owner = session.get("employee_id")
+        if owner and owner != user["id"] and user["role"] != "admin":
+            raise BizError(CODE_NO_SESSION, "会话不存在或已被清理", 404)
+        if not owner:
+            db.bind_session(body.session_id, user["id"])
 
     if db.count_messages(body.session_id) >= MAX_MESSAGES:
         raise BizError(CODE_TOO_MANY,
@@ -510,7 +525,7 @@ async def chat(body: ChatIn, request: Request):
 
     trace_id = trace_of(request)
     assistant_id = db.new_id("m")
-    prompt_version = STATE["prompt"]["version"]
+    prompt_version = int(prompt["version"])
     quota_hit = llm_quota_exhausted()   # 配额耗尽就降级，不报错
 
     # 先占位落库：进程崩溃、用户关页面、网关掐连接都不会给你收尾机会，
@@ -540,7 +555,7 @@ async def chat(body: ChatIn, request: Request):
             yield sse("status", {"stage": "retrieving", "text": "正在检索制度…"})
 
             try:
-                hits = STATE["retriever"].search(question, TOP_K)
+                hits = retriever.search(question, TOP_K)
             except Exception as e:
                 traceback.print_exc()
                 finalize("", "error", CODE_RETRIEVE_FAIL)
@@ -550,7 +565,7 @@ async def chat(body: ChatIn, request: Request):
                                     "retryable": True})
                 return
 
-            sources = [hit_to_source(h) for h in hits]
+            sources = [hit_to_source(h, chunks) for h in hits]
             best = max((s["score"] for s in sources), default=0.0)
 
             # 检索太弱或配额耗尽就不调模型：省钱，也不会硬编出答案
@@ -574,8 +589,7 @@ async def chat(body: ChatIn, request: Request):
                                             for i, s in enumerate(sources)]})
             yield sse("status", {"stage": "generating", "text": "正在生成回答…"})
 
-            messages = build_messages(question, hits, history,
-                                      STATE["prompt"]["content"])
+            messages = build_messages(question, hits, history, prompt["content"])
 
             try:
                 for seq, piece in enumerate(STATE["llm"].chat_stream(messages), 1):
