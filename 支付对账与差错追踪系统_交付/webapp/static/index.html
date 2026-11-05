@@ -39,12 +39,17 @@
   }
   header h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .3px; }
   header .hint { font-size: 12px; opacity: .72; margin-left: 10px; font-weight: 400; }
+  header .header-actions { display: flex; align-items: center; gap: 8px; }
   header button {
     background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.28);
     border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer;
     font-family: inherit;
   }
   header button:hover { background: rgba(255,255,255,.24); }
+  header #btn-report {
+    background: #fff; color: var(--navy); border-color: #fff; font-weight: 600;
+  }
+  header #btn-report:hover { background: #eaf0fa; }
 
   /* ===== 消息区 ===== */
   main {
@@ -181,6 +186,69 @@
     padding: 16px; overflow: auto; white-space: pre-wrap; font-size: 13px;
     color: #374151; line-height: 1.8;
   }
+
+  /* ===== 空状态 / 快捷提问 ===== */
+  .welcome {
+    max-width: 720px; margin: 36px auto 0; text-align: center;
+  }
+  .welcome .eyebrow {
+    display: inline-block; font-size: 11.5px; letter-spacing: .12em;
+    color: var(--navy-light); background: #eaf0fa; border-radius: 99px;
+    padding: 3px 10px; margin-bottom: 12px;
+  }
+  .welcome h2 { margin: 0 0 6px; font-size: 24px; color: var(--navy); }
+  .welcome p { margin: 0; color: var(--muted); font-size: 13px; }
+  .suggest-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-top: 22px; text-align: left;
+  }
+  .suggest-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .suggest-card:hover {
+    border-color: #b9c8e0; box-shadow: 0 6px 18px rgba(31,56,100,.08);
+    transform: translateY(-1px);
+  }
+  .suggest-card strong { display: block; color: var(--navy); font-size: 13px; }
+  .suggest-card span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+  /* ===== 消息操作 ===== */
+  .msg-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .btn-mini {
+    background: none; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 5px; padding: 2px 9px; font-size: 11.5px;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-mini:hover { border-color: var(--navy-light); color: var(--navy); }
+
+  /* ===== 报表弹窗 ===== */
+  .report-options { display: grid; gap: 10px; margin-top: 12px; }
+  .report-option {
+    text-align: left; background: #fbfcfe; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; cursor: pointer;
+    font-family: inherit; transition: border-color .15s, background .15s;
+  }
+  .report-option:hover { border-color: #b9c8e0; background: #f4f7fc; }
+  .report-option strong { display: block; color: var(--navy); font-size: 13px; }
+  .report-option span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  /* ===== Toast ===== */
+  .toast {
+    position: fixed; left: 50%; bottom: 120px; z-index: 40;
+    transform: translateX(-50%) translateY(8px);
+    background: #1f2937; color: #fff; border-radius: 8px;
+    padding: 7px 14px; font-size: 12.5px; opacity: 0;
+    pointer-events: none; transition: opacity .18s, transform .18s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 640px) {
+    .suggest-grid { grid-template-columns: 1fr; }
+    header .hint { display: none; }
+    .welcome { margin-top: 20px; }
+  }
 </style>
 </head>
 <body>
@@ -190,7 +258,10 @@
     <h1 style="display:inline">支付对账制度助手</h1>
     <span class="hint">基于制度文档回答，不替代财务审核</span>
   </div>
-  <button id="btn-new">新建对话</button>
+  <div class="header-actions">
+    <button id="btn-report" title="把当前会话导出成 Markdown 或 CSV">生成报表</button>
+    <button id="btn-new">新建对话</button>
+  </div>
 </header>
 
 <main id="messages"></main>
@@ -215,6 +286,33 @@
   </div>
 </div>
 
+<div class="modal" id="report-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span>生成报表</span>
+      <button id="report-close">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-top:0;color:var(--muted)">
+        把当前会话整理成文件，可直接提交、归档或贴进报告。
+      </p>
+      <div class="report-options">
+        <button class="report-option" data-format="md">
+          <strong>Markdown 报告</strong>
+          <span>按「问题 → 回答 → 参考制度」整理，适合阅读和提交。</span>
+        </button>
+        <button class="report-option" data-format="csv">
+          <strong>CSV 明细</strong>
+          <span>一行一条消息，可用 Excel 打开做统计。</span>
+        </button>
+      </div>
+      <div class="err" id="report-error" style="display:none;margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
 /* ============================================================================
    员工问答前端
@@ -231,6 +329,17 @@ const messagesEl = $('messages');
 const inputEl = $('input');
 const sendBtn = $('btn-send');
 const stopBtn = $('btn-stop');
+const reportBtn = $('btn-report');
+const reportModal = $('report-modal');
+const toastEl = $('toast');
+let toastTimer = null;
+
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
 
 /* 会话 ID：存在 localStorage，刷新不变；点"新建对话"才换 */
 let sessionId = localStorage.getItem('chat_session_id');
@@ -252,6 +361,42 @@ function escapeHtml(s) {
 
 function scrollToBottom() {
   window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+/* 空会话：给几个可以直接点的示例，不让页面只剩一个输入框 */
+function renderWelcome() {
+  if (messagesEl.querySelector('.msg')) return;
+  messagesEl.innerHTML = `
+    <section class="welcome">
+      <span class="eyebrow">支付对账知识库</span>
+      <h2>今天想查什么制度？</h2>
+      <p>直接问，我会从制度文档里找答案，并给出原文位置。</p>
+      <div class="suggest-grid">
+        <div class="suggest-card" data-question="长款和短款有什么区别？">
+          <strong>长款和短款有什么区别？</strong>
+          <span>差错分类 · 定义与处理方向</span>
+        </div>
+        <div class="suggest-card" data-question="跨日退款怎么匹配？">
+          <strong>跨日退款怎么匹配？</strong>
+          <span>对账规则 · 时间窗口</span>
+        </div>
+        <div class="suggest-card" data-question="差错工单怎么处理？">
+          <strong>差错工单怎么处理？</strong>
+          <span>流程 · 角色与时限</span>
+        </div>
+        <div class="suggest-card" data-question="对账差异的分析口径是什么？">
+          <strong>对账差异的分析口径是什么？</strong>
+          <span>口径 · 统计与复核</span>
+        </div>
+      </div>
+    </section>`;
+  messagesEl.querySelectorAll('.suggest-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      inputEl.value = card.dataset.question;
+      autoGrow();
+      inputEl.focus();
+    });
+  });
 }
 
 /* ------------------------------------------------------------ 渲染一条消息 */
@@ -277,20 +422,34 @@ function addAssistantMessage() {
       <span class="answer"></span><span class="cursor"></span>
       <div class="status"><span class="dot"></span><span class="status-text">正在检索制度…</span></div>
       <div class="sources-slot"></div>
+      <div class="msg-actions" style="display:none">
+        <button class="btn-mini copy-btn" type="button">复制回答</button>
+      </div>
     </div>`;
   messagesEl.appendChild(div);
 
   const bubble = div.querySelector('.bubble');
-  return {
+  const handle = {
     answerEl: div.querySelector('.answer'),
     cursorEl: div.querySelector('.cursor'),
     statusEl: div.querySelector('.status'),
     statusTextEl: div.querySelector('.status-text'),
     sourcesSlot: div.querySelector('.sources-slot'),
+    actionsEl: div.querySelector('.msg-actions'),
+    copyBtn: div.querySelector('.copy-btn'),
     bubbleEl: bubble,
     text: '',                       // 累积的完整回答
     sources: [],                    // 引用先缓存，done 后再渲染
   };
+  handle.copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(handle.text);
+      toast('回答已复制');
+    } catch {
+      toast('复制失败，请手动选择文本');
+    }
+  });
+  return handle;
 }
 
 /* 把累积文本写回答案区（模板字符串整体替换，保证光标始终在末尾） */
@@ -334,6 +493,7 @@ function renderSources(h) {
 function renderError(h, code, message, retryText) {
   h.cursorEl.remove();
   setStatus(h, '');
+  if (h.actionsEl) h.actionsEl.style.display = 'none';
   h.bubbleEl.insertAdjacentHTML('beforeend', `
     <div class="err">
       <div>${escapeHtml(message)}</div>
@@ -397,6 +557,8 @@ async function send(text, isRetry = false) {
   if (!question || streaming) return;
 
   if (!isRetry) {
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
     addUserMessage(question);
     inputEl.value = '';
     inputEl.style.height = 'auto';
@@ -474,6 +636,7 @@ async function send(text, isRetry = false) {
             setStatus(h, '');
             h.cursorEl.remove();
             renderSources(h);
+            if (h.text) h.actionsEl.style.display = 'flex';
             if (evt.data.degraded) {
               h.bubbleEl.insertAdjacentHTML('beforeend',
                 '<div class="status">未检索到相关制度，已给出兜底提示。</div>');
@@ -515,7 +678,14 @@ async function loadHistory() {
     const resp = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
     if (!resp.ok) return;          // 404 = 新会话，没什么可恢复的
     const json = await resp.json();
-    if (json.code !== 0 || !json.data.messages.length) return;
+    if (json.code !== 0) return;
+    if (!json.data.messages.length) {
+      renderWelcome();
+      return;
+    }
+
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
 
     for (const m of json.data.messages) {
       if (m.role === 'user') {
@@ -528,6 +698,7 @@ async function loadHistory() {
         setStatus(h, m.status === 'aborted' ? '（生成中断，仅保留部分内容）' : '');
         h.sources = m.sources || [];
         renderSources(h);
+        if (h.text) h.actionsEl.style.display = 'flex';
       }
     }
     scrollToBottom();
@@ -535,6 +706,74 @@ async function loadHistory() {
     /* 恢复失败不影响新提问 */
   }
 }
+
+/* --------------------------------------------------------------- 报表下载 */
+function openReport() {
+  if (!messagesEl.querySelector('.msg')) {
+    toast('当前还没有问答，先提一个问题');
+    return;
+  }
+  const err = $('report-error');
+  err.style.display = 'none';
+  err.textContent = '';
+  reportModal.classList.add('show');
+}
+
+async function downloadReport(format) {
+  const err = $('report-error');
+  err.style.display = 'none';
+  const buttons = reportModal.querySelectorAll('.report-option');
+  buttons.forEach((b) => { b.disabled = true; });
+
+  try {
+    const resp = await fetch('/api/v1/reports/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, format }),
+    });
+
+    if (!resp.ok) {
+      let message = `生成失败（HTTP ${resp.status}）`;
+      try {
+        const json = await resp.json();
+        message = json.message || message;
+      } catch { /* 非 JSON 响应保留默认文案 */ }
+      throw new Error(message);
+    }
+
+    const blob = await resp.blob();
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `reconciliation_qa_report.${format}`;
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    reportModal.classList.remove('show');
+    toast('报表已生成，开始下载');
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = '';
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+  }
+}
+
+reportBtn.addEventListener('click', openReport);
+$('report-close').addEventListener('click', () => reportModal.classList.remove('show'));
+reportModal.addEventListener('click', (e) => {
+  if (e.target.id === 'report-modal') reportModal.classList.remove('show');
+});
+reportModal.querySelectorAll('.report-option').forEach((button) => {
+  button.addEventListener('click', () => downloadReport(button.dataset.format));
+});
 
 /* ------------------------------------------------------------------ 事件 */
 function autoGrow() {
@@ -559,9 +798,11 @@ $('btn-new').addEventListener('click', () => {
   sessionId = 's_' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
   localStorage.setItem('chat_session_id', sessionId);
   messagesEl.innerHTML = '';
+  renderWelcome();
   inputEl.focus();
 });
 
+renderWelcome();
 loadHistory();
 inputEl.focus();
 </script>
