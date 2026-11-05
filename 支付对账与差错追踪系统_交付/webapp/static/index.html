@@ -261,6 +261,7 @@
   <div class="header-actions">
     <button id="btn-report" title="把当前会话导出成 Markdown 或 CSV">生成报表</button>
     <button id="btn-new">新建对话</button>
+    <button id="btn-logout" title="退出当前账号">退出</button>
   </div>
 </header>
 
@@ -791,6 +792,10 @@ inputEl.addEventListener('keydown', (e) => {
 sendBtn.addEventListener('click', () => send());
 stopBtn.addEventListener('click', () => {
   if (controller) controller.abort();
+});
+
+$('btn-logout').addEventListener('click', () => {
+  window.location.href = '/logout';
 });
 
 $('btn-new').addEventListener('click', () => {
