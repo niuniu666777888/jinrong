@@ -57,12 +57,17 @@ def _enable_dpi_awareness() -> float:
 
 DPI = _enable_dpi_awareness()
 
-# 配色只留四个：白底、正文黑、辅助灰、主色深蓝
+# 界面配色：浅灰蓝背景 + 白色卡片 + 深蓝主色
+APP_BG = "#f3f6fb"
 BG = "#ffffff"
-TEXT = "#1f2937"
-MUTED = "#8a94a6"
-LINE = "#e8ebf0"
+SURFACE_ALT = "#f7f9fd"
+TEXT = "#111827"
+MUTED = "#6b7280"
+LINE = "#e4e9f2"
 ACCENT = "#1f3864"
+ACCENT_HOVER = "#2c4f86"
+ACCENT_SOFT = "#eaf1fb"
+ERROR = "#b42318"
 
 
 def load_state() -> dict:
@@ -85,32 +90,56 @@ def save_state(data: dict) -> None:
 # ==============================================================================
 class LoginFrame(tk.Frame):
     def __init__(self, master, on_success):
-        super().__init__(master, bg=BG)
+        super().__init__(master, bg=APP_BG)
         self.on_success = on_success
         cfg = load_state()
 
-        # 居中一块，四周留白；不再有标题横幅和大按钮
-        card = tk.Frame(self, bg=BG)
-        card.place(relx=0.5, rely=0.46, anchor="center")
+        # 居中卡片：白底 + 细边框 + 品牌标识
+        outer = tk.Frame(self, bg=LINE)
+        outer.place(relx=0.5, rely=0.48, anchor="center")
+        card = tk.Frame(outer, bg=BG)
+        card.pack(padx=1, pady=1)
 
-        tk.Label(card, text="支付对账助手", bg=BG, fg=ACCENT,
-                 font=("Microsoft YaHei", 18, "bold")).pack(anchor="w")
-        tk.Label(card, text="请登录后使用", bg=BG, fg=MUTED,
-                 font=("Microsoft YaHei", 9)).pack(anchor="w", pady=(4, 22))
+        inner = tk.Frame(card, bg=BG)
+        inner.pack(padx=34, pady=30)
+
+        head = tk.Frame(inner, bg=BG)
+        head.pack(anchor="w", pady=(0, 20))
+
+        logo = tk.Canvas(head, width=42, height=42, bg=BG,
+                         highlightthickness=0, bd=0)
+        logo.pack(side=LEFT)
+        logo.create_oval(2, 2, 40, 40, fill=ACCENT, outline="")
+        logo.create_text(21, 21, text="金", fill="#ffffff",
+                         font=("Microsoft YaHei", 15, "bold"))
+
+        titles = tk.Frame(head, bg=BG)
+        titles.pack(side=LEFT, padx=(12, 0))
+        tk.Label(titles, text="支付对账助手", bg=BG, fg=TEXT,
+                 font=("Microsoft YaHei", 16, "bold")).pack(anchor="w")
+        tk.Label(titles, text="制度问答 · 差错处理", bg=BG, fg=MUTED,
+                 font=("Microsoft YaHei", 9)).pack(anchor="w", pady=(2, 0))
 
         self.var_server = tk.StringVar(value=cfg.get("server", DEFAULT_SERVER))
         self.var_user = tk.StringVar(value=cfg.get("employee_no", ""))
         self.var_pwd = tk.StringVar()
 
         def field(label: str, var: tk.StringVar, show: str = ""):
-            tk.Label(card, text=label, bg=BG, fg=MUTED,
-                     font=("Microsoft YaHei", 9)).pack(anchor="w", pady=(0, 3))
-            e = tk.Entry(card, textvariable=var, show=show, width=30,
-                         relief="flat", bg="#f5f6f8", fg=TEXT,
-                         insertbackground=TEXT, font=("Microsoft YaHei", 10),
-                         highlightthickness=1, highlightbackground=LINE,
-                         highlightcolor=ACCENT)
-            e.pack(anchor="w", ipady=6, ipadx=6, pady=(0, 12))
+            tk.Label(inner, text=label, bg=BG, fg=MUTED,
+                     font=("Microsoft YaHei", 9)).pack(anchor="w", pady=(0, 4))
+            wrap = tk.Frame(inner, bg=SURFACE_ALT, highlightbackground=LINE,
+                            highlightthickness=1)
+            wrap.pack(fill=X, pady=(0, 12))
+            e = tk.Entry(wrap, textvariable=var, show=show, width=30,
+                         relief="flat", bg=SURFACE_ALT, fg=TEXT,
+                         insertbackground=ACCENT,
+                         font=("Microsoft YaHei", 11),
+                         highlightthickness=0, borderwidth=0)
+            e.pack(fill=X, ipady=7, padx=10)
+            e.bind("<FocusIn>",
+                   lambda ev: wrap.config(highlightbackground=ACCENT))
+            e.bind("<FocusOut>",
+                   lambda ev: wrap.config(highlightbackground=LINE))
             e.bind("<Return>", lambda ev: self._login())
             return e
 
@@ -118,17 +147,24 @@ class LoginFrame(tk.Frame):
         field("工号", self.var_user)
         pwd_entry = field("密码", self.var_pwd, "*")
 
-        self.btn = tk.Button(card, text="登录", command=self._login,
+        self.btn = tk.Button(inner, text="登录", command=self._login,
                              bg=ACCENT, fg="#ffffff", relief="flat",
-                             activebackground="#2f4f7f", activeforeground="#ffffff",
-                             font=("Microsoft YaHei", 10), cursor="hand2",
-                             width=30, pady=6, borderwidth=0)
-        self.btn.pack(anchor="w", pady=(6, 10))
+                             activebackground=ACCENT_HOVER,
+                             activeforeground="#ffffff",
+                             font=("Microsoft YaHei", 10, "bold"),
+                             cursor="hand2", pady=7, borderwidth=0)
+        self.btn.pack(fill=X, pady=(4, 8))
+        self.btn.bind("<Enter>", lambda e: self.btn.config(bg=ACCENT_HOVER))
+        self.btn.bind("<Leave>", lambda e: self.btn.config(bg=ACCENT))
 
-        self.err = tk.Label(card, text="", bg=BG, fg="#a61b1b",
-                            font=("Microsoft YaHei", 9), wraplength=260,
+        self.err = tk.Label(inner, text="", bg=BG, fg=ERROR,
+                            font=("Microsoft YaHei", 9), wraplength=300,
                             justify="left")
         self.err.pack(anchor="w")
+
+        tk.Label(inner, text="默认服务端 http://127.0.0.1:8000", bg=BG,
+                 fg="#9aa4b2", font=("Microsoft YaHei", 8)).pack(
+                     anchor="w", pady=(14, 0))
 
         pwd_entry.focus_set()
 
@@ -187,85 +223,157 @@ class ChatFrame(tk.Frame):
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
-        # ---------- 顶栏：只有名字和三个文字链接 ----------
-        top = tk.Frame(self, bg=BG, height=44)
-        top.pack(side=TOP, fill=X)
-        top.pack_propagate(False)
+        self.configure(bg=APP_BG)
 
-        tk.Label(top, text="制度助手", bg=BG, fg=ACCENT,
-                 font=("Microsoft YaHei", 12, "bold")).pack(side=LEFT, padx=(18, 0))
+        # ---------- 顶栏：品牌 + 用户 + 操作 ----------
+        header = tk.Frame(self, bg=BG)
+        header.pack(side=TOP, fill=X)
 
-        def text_button(text, cmd, pad=(10, 0), color=MUTED):
-            lb = tk.Label(top, text=text, bg=BG, fg=color,
-                          font=("Microsoft YaHei", 9), cursor="hand2")
-            lb.pack(side=RIGHT, padx=pad)
-            lb.bind("<Button-1>", lambda e: cmd())
-            lb.bind("<Enter>", lambda e: lb.config(fg=ACCENT))
-            lb.bind("<Leave>", lambda e: lb.config(fg=color))
-            return lb
+        head = tk.Frame(header, bg=BG)
+        head.pack(fill=X, padx=18, pady=10)
 
-        text_button("退出", self._logout, pad=(18, 0))
+        logo = tk.Canvas(head, width=30, height=30, bg=BG,
+                         highlightthickness=0, bd=0)
+        logo.pack(side=LEFT)
+        logo.create_oval(2, 2, 28, 28, fill=ACCENT, outline="")
+        logo.create_text(15, 15, text="金", fill="#ffffff",
+                         font=("Microsoft YaHei", 10, "bold"))
+
+        titles = tk.Frame(head, bg=BG)
+        titles.pack(side=LEFT, padx=(9, 0))
+        tk.Label(titles, text="制度助手", bg=BG, fg=TEXT,
+                 font=("Microsoft YaHei", 12, "bold")).pack(anchor="w")
+        tk.Label(titles, text="支付对账知识库", bg=BG, fg=MUTED,
+                 font=("Microsoft YaHei", 8)).pack(anchor="w")
+
+        actions = tk.Frame(head, bg=BG)
+        actions.pack(side=RIGHT)
+
+        def action(text, cmd, color=MUTED):
+            b = tk.Button(actions, text=text, command=cmd, bg=BG, fg=color,
+                          relief="flat", activebackground=SURFACE_ALT,
+                          activeforeground=ACCENT,
+                          font=("Microsoft YaHei", 9), cursor="hand2",
+                          padx=9, pady=4, borderwidth=0)
+            b.pack(side=RIGHT, padx=(2, 0))
+            b.bind("<Enter>", lambda e: b.config(bg=SURFACE_ALT))
+            b.bind("<Leave>", lambda e: b.config(bg=BG))
+            return b
+
+        action("退出", self._logout)
         if self.me.get("role") == "admin":
-            # 管理员多一个入口，用主色标出来，避免藏在灰色链接里
-            text_button("管理", self._open_admin, color=ACCENT)
-        text_button("新建", self._new_chat)
+            action("管理", self._open_admin, ACCENT)
+        action("新建", self._new_chat)
 
-        tk.Label(top, text=f"{self.me.get('name', '')}", bg=BG, fg=MUTED,
-                 font=("Microsoft YaHei", 9)).pack(side=RIGHT, padx=(0, 4))
+        role = "管理员" if self.me.get("role") == "admin" else "员工"
+        tk.Label(actions, text=f"{self.me.get('name', '')} · {role}", bg=BG,
+                 fg=MUTED, font=("Microsoft YaHei", 8)).pack(
+                     side=RIGHT, padx=(0, 14))
 
         tk.Frame(self, bg=LINE, height=1).pack(side=TOP, fill=X)
 
-        # ---------- 对话区 ----------
+        # ---------- 对话卡片 ----------
+        body = tk.Frame(self, bg=BG, highlightbackground=LINE,
+                        highlightthickness=1)
+        body.pack(side=TOP, fill=BOTH, expand=True, padx=14, pady=(12, 8))
+
         self.text = scrolledtext.ScrolledText(
-            self, wrap="word", state="disabled", relief="flat",
+            body, wrap="word", state="disabled", relief="flat",
             borderwidth=0, highlightthickness=0, bg=BG,
-            font=("Microsoft YaHei", 10), padx=22, pady=14,
+            font=("Microsoft YaHei", 10), padx=26, pady=16,
             cursor="arrow",
         )
         self.text.pack(side=TOP, fill=BOTH, expand=True)
 
-        # 角色靠对齐区分，不用颜色堆叠
-        self.text.tag_configure("user", justify="right", foreground=ACCENT,
-                                spacing1=18, spacing3=2, lmargin1=90, lmargin2=90)
+        # 角色靠对齐和浅色底区分，不用重色块堆叠
+        self.text.tag_configure("role_user", justify="right", foreground=MUTED,
+                                font=("Microsoft YaHei", 8),
+                                lmargin1=170, lmargin2=170, rmargin=26,
+                                spacing1=16, spacing3=3)
+        self.text.tag_configure("user", justify="right", foreground=TEXT,
+                                background="#eef3fb",
+                                font=("Microsoft YaHei", 10),
+                                lmargin1=170, lmargin2=170, rmargin=26,
+                                spacing1=2, spacing3=10)
+        self.text.tag_configure("role_ai", justify="left", foreground=MUTED,
+                                font=("Microsoft YaHei", 8),
+                                lmargin1=26, lmargin2=26, spacing1=8,
+                                spacing3=3)
         self.text.tag_configure("ai", justify="left", foreground=TEXT,
-                                spacing1=2, spacing3=16, rmargin=60)
+                                font=("Microsoft YaHei", 10),
+                                lmargin1=26, lmargin2=26, rmargin=110,
+                                spacing1=2, spacing3=16)
         self.text.tag_configure("link", foreground="#3b6ea5",
                                 font=("Microsoft YaHei", 9), underline=True)
         self.text.tag_configure("status", foreground=MUTED,
-                                font=("Microsoft YaHei", 9), spacing3=14)
-        self.text.tag_configure("error", foreground="#a61b1b", spacing3=14)
+                                font=("Microsoft YaHei", 9, "italic"),
+                                lmargin1=26, lmargin2=26, spacing3=12)
+        self.text.tag_configure("error", foreground=ERROR,
+                                background="#fef2f2",
+                                lmargin1=26, lmargin2=26, rmargin=90,
+                                spacing3=12)
         self.text.tag_configure("hint", foreground="#b6bdc9",
-                                font=("Microsoft YaHei", 11), justify="center",
-                                spacing1=90)
-        self.text.tag_configure("hint2", foreground="#cdd3dc",
-                                font=("Microsoft YaHei", 9), justify="center",
-                                spacing3=20)
+                                font=("Microsoft YaHei", 15, "bold"),
+                                justify="center", spacing1=90)
+        self.text.tag_configure("hint2", foreground="#9aa4b2",
+                                font=("Microsoft YaHei", 9),
+                                justify="center", spacing3=14)
+        self.text.tag_configure("suggest", foreground=ACCENT,
+                                font=("Microsoft YaHei", 9), underline=True,
+                                justify="center", spacing1=4, spacing3=3)
 
-        # ---------- 输入区 ----------
-        tk.Frame(self, bg=LINE, height=1).pack(side=TOP, fill=X)
+        # ---------- 输入卡片 ----------
+        bottom = tk.Frame(self, bg=APP_BG)
+        bottom.pack(side=TOP, fill=X, padx=14, pady=(0, 14))
 
-        bottom = tk.Frame(self, bg=BG)
-        bottom.pack(side=TOP, fill=X, padx=18, pady=(12, 16))
+        row = tk.Frame(bottom, bg=APP_BG)
+        row.pack(fill=X)
 
-        self.input = tk.Text(bottom, height=2, wrap="word", relief="flat",
-                             font=("Microsoft YaHei", 10), padx=10, pady=8,
-                             bg="#f5f6f8", fg=TEXT, insertbackground=TEXT,
-                             highlightthickness=1, highlightbackground=LINE,
-                             highlightcolor=ACCENT, borderwidth=0)
-        self.input.pack(side=LEFT, fill=X, expand=True)
+        input_card = tk.Frame(row, bg=BG, highlightbackground=LINE,
+                              highlightthickness=1)
+        input_card.pack(side=LEFT, fill=X, expand=True)
+
+        self.input = tk.Text(input_card, height=2, wrap="word", relief="flat",
+                             font=("Microsoft YaHei", 10), padx=12, pady=8,
+                             bg=SURFACE_ALT, fg=TEXT, insertbackground=ACCENT,
+                             highlightthickness=0, borderwidth=0)
+        self.input.pack(fill=BOTH, expand=True, padx=1, pady=1)
         self.input.bind("<Return>", self._on_enter)
         self.input.bind("<Shift-Return>", lambda e: None)
+        self.input.bind("<KeyRelease>", lambda e: self._update_count())
+        self.input.bind("<FocusIn>",
+                        lambda e: input_card.config(highlightbackground=ACCENT))
+        self.input.bind("<FocusOut>",
+                        lambda e: input_card.config(highlightbackground=LINE))
 
-        # 发送/停止合并成一个按钮：状态由文字与颜色切换
-        self.btn = tk.Button(bottom, text="发送", command=self._toggle,
+        self.btn = tk.Button(row, text="发送", command=self._toggle,
                              bg=ACCENT, fg="#ffffff", relief="flat",
-                             activebackground="#2f4f7f", activeforeground="#ffffff",
-                             font=("Microsoft YaHei", 10), cursor="hand2",
-                             width=6, pady=6, borderwidth=0)
+                             activebackground=ACCENT_HOVER,
+                             activeforeground="#ffffff",
+                             font=("Microsoft YaHei", 10, "bold"),
+                             cursor="hand2", width=7, pady=8, borderwidth=0)
         self.btn.pack(side=RIGHT, padx=(10, 0), fill=Y)
+        self.btn.bind("<Enter>", lambda e: self.btn.config(
+            bg=LINE if self.streaming else ACCENT_HOVER))
+        self.btn.bind("<Leave>", lambda e: self.btn.config(
+            bg=SURFACE_ALT if self.streaming else ACCENT))
+
+        meta = tk.Frame(bottom, bg=APP_BG)
+        meta.pack(fill=X, pady=(5, 0))
+        tk.Label(meta, text="Enter 发送 · Shift+Enter 换行", bg=APP_BG,
+                 fg="#9aa4b2", font=("Microsoft YaHei", 8)).pack(side=LEFT)
+        self.count_label = tk.Label(meta, text="0 / 500", bg=APP_BG,
+                                    fg="#9aa4b2",
+                                    font=("Microsoft YaHei", 8))
+        self.count_label.pack(side=RIGHT)
 
         self._show_empty_hint()
         self.input.focus_set()
+
+    def _update_count(self) -> None:
+        n = len(self.input.get("1.0", END).strip())
+        self.count_label.config(text=f"{n} / 500",
+                                fg=ERROR if n > 500 else "#9aa4b2")
 
     # ------------------------------------------------------------------
     # 渲染
@@ -280,13 +388,32 @@ class ChatFrame(tk.Frame):
     # 交互
     # ------------------------------------------------------------------
     def _show_empty_hint(self) -> None:
-        """空对话时给一句提示，第一条消息发出后清掉，不常驻。"""
+        """空对话时给一句提示和几个可点击的示例问题。"""
         self.text.config(state="normal")
         self.text.delete("1.0", END)
-        self.text.insert(END, "输入问题开始\n", "hint")
-        self.text.insert(END, "例如：长款和短款有什么区别？\n", "hint2")
+        self.text.insert(END, "有什么可以帮你？\n", "hint")
+        self.text.insert(END, "从制度里找答案，并给出原文引用。\n", "hint2")
+        for question in (
+            "长款和短款有什么区别？",
+            "跨日退款怎么匹配？",
+            "差错工单怎么处理？",
+        ):
+            tag = f"hintq_{uuid.uuid4().hex[:6]}"
+            self.text.insert(END, f"{question}\n", ("suggest", tag))
+            self.text.tag_bind(tag, "<Button-1>",
+                               lambda e, q=question: self._fill_input(q))
+            self.text.tag_bind(tag, "<Enter>",
+                               lambda e: self.text.config(cursor="hand2"))
+            self.text.tag_bind(tag, "<Leave>",
+                               lambda e: self.text.config(cursor="arrow"))
         self.text.config(state="disabled")
         self._hint_visible = True
+
+    def _fill_input(self, question: str) -> None:
+        self.input.delete("1.0", END)
+        self.input.insert("1.0", question)
+        self.input.focus_set()
+        self._update_count()
 
     def _clear_hint(self) -> None:
         if getattr(self, "_hint_visible", False):
@@ -319,7 +446,10 @@ class ChatFrame(tk.Frame):
             return
 
         self.input.delete("1.0", END)
+        self._update_count()
+        self._insert("你\n", "role_user")
         self._insert(question + "\n", "user")
+        self._ai_labeled = False
 
         # 状态占位：出现即占位，收到第一个字就删掉
         self.text.config(state="normal")
@@ -331,8 +461,8 @@ class ChatFrame(tk.Frame):
         self.pending_sources = []
         self.streaming = True
         self.stop_flag = False
-        self.btn.config(text="停止", bg="#e8ebf0", fg="#4b5563",
-                        activebackground="#dbe0e8", activeforeground="#4b5563")
+        self.btn.config(text="停止", bg=SURFACE_ALT, fg=MUTED,
+                        activebackground=LINE, activeforeground=TEXT)
 
         threading.Thread(target=self._worker, args=(question,), daemon=True).start()
 
@@ -384,6 +514,9 @@ class ChatFrame(tk.Frame):
 
         elif kind == "delta":
             self._clear_status()
+            if not getattr(self, "_ai_labeled", False):
+                self._insert("制度助手\n", "role_ai")
+                self._ai_labeled = True
             self.text.config(state="normal")
             self.text.insert(END, evt.get("text", ""), "ai")
             self.text.config(state="disabled")
@@ -408,7 +541,7 @@ class ChatFrame(tk.Frame):
         self._clear_status()
         self.streaming = False
         self.btn.config(text="发送", bg=ACCENT, fg="#ffffff",
-                        activebackground="#2f4f7f", activeforeground="#ffffff")
+                        activebackground=ACCENT_HOVER, activeforeground="#ffffff")
         self.input.focus_set()
 
     # ------------------------------------------------------------------
@@ -482,7 +615,10 @@ class ChatFrame(tk.Frame):
             self._stop()
         self.session_id = "s_" + uuid.uuid4().hex[:12]
         self.status_index = None
+        self._ai_labeled = False
         self._show_empty_hint()
+        self.input.delete("1.0", END)
+        self._update_count()
         self.input.focus_set()
 
     def _open_admin(self) -> None:
@@ -512,15 +648,15 @@ class App(tk.Tk):
         except Exception:
             pass
 
-        self.title("支付对账助手")
+        self.title("支付对账助手 · 制度问答")
 
         # 窗口按逻辑尺寸 × 缩放比计算，再夹到屏幕范围内，避免小本上装不下
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
         w = min(int(900 * DPI), int(sw * 0.92))
-        h = min(int(660 * DPI), int(sh * 0.88))
+        h = min(int(700 * DPI), int(sh * 0.88))
         self.geometry(f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 3)}")
-        self.minsize(int(640 * DPI), int(460 * DPI))
-        self.configure(bg=BG)
+        self.minsize(int(640 * DPI), int(500 * DPI))
+        self.configure(bg=APP_BG)
 
         tkfont.nametofont("TkDefaultFont").configure(family="Microsoft YaHei", size=10)
 

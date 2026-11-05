@@ -28,10 +28,11 @@ import tkinter as tk
 
 from api import ApiError, ChatClient
 
+APP_BG = "#f3f6fb"
 BG = "#ffffff"
-TEXT = "#1f2937"
-MUTED = "#8a94a6"
-LINE = "#e8ebf0"
+TEXT = "#111827"
+MUTED = "#6b7280"
+LINE = "#e4e9f2"
 ACCENT = "#1f3864"
 
 FLAG_LABELS = {
@@ -53,7 +54,7 @@ class AdminWindow(tk.Toplevel):
         self.title("管理后台 · 支付对账助手")
         self.geometry("1080x700")
         self.minsize(900, 560)
-        self.configure(bg=BG)
+        self.configure(bg=APP_BG)
         self.transient(master)
 
         style = ttk.Style(self)
