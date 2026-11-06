@@ -133,6 +133,25 @@ pytest -q
   且不产生工单、确认后建单并进入 G2、拒绝即终止不写入、三连确认走完整链路、建单人复核被拒（403）、
   无待办时确认返回 409、会话可回读、未知会话 404。
 
+## 部署
+
+`deploy/` 下是一套可直接用的部署物料：
+
+| 文件 | 用途 |
+|---|---|
+| `Dockerfile` / `docker-compose.yml` | 容器化部署（推荐），数据挂卷持久化 |
+| `jinrong-mvp.service` | systemd 单元（不走 Docker 时用） |
+| `nginx.conf` | 反向代理，已处理 SSE 的 `proxy_buffering off` |
+| `deploy.sh` | 打包上传 + 远端重启（Docker / systemd 两种模式） |
+| `README.md` | 部署手册：环境要求、三种方式、升级回滚、常见问题 |
+
+```bash
+cd deploy
+cp .env.example .env        # 写入 MVP_SECRET
+docker compose up -d --build
+curl -s http://127.0.0.1:8080/api/health
+```
+
 ## 配置
 
 | 变量 | 默认 | 说明 |

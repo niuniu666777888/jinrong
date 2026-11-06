@@ -1,0 +1,41 @@
+# 金服 MVP —— systemd 服务单元（不走 Docker 时用）
+#
+# 安装：
+#   sudo cp jinrong-mvp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jinrong-mvp
+# 查看日志：
+#   journalctl -u jinrong-mvp -f
+
+[Unit]
+Description=Jinrong Reconciliation MVP
+Documentation=https://github.com/niuniu666777888/jinrong/tree/main/src
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jinrong
+Group=jinrong
+WorkingDirectory=/opt/jinrong/src
+
+Environment="MVP_HOST=0.0.0.0"
+Environment="MVP_PORT=8080"
+Environment="MVP_DB=/var/lib/jinrong/mvp.db"
+# 生产环境把密钥写在下面这个文件里（权限 600），避免出现在 unit 中
+EnvironmentFile=-/etc/jinrong/mvp.env
+
+ExecStart=/opt/jinrong/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/jinrong
+
+[Install]
+WantedBy=multi-user.target
