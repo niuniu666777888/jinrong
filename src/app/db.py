@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS ticket_event (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS agent_run (
+  id         TEXT PRIMARY KEY,
+  goal       TEXT NOT NULL,
+  operator   TEXT NOT NULL,
+  status     TEXT NOT NULL,          -- running / waiting_confirm / done / aborted / limit
+  state      TEXT NOT NULL,          -- JSON 快照
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_diff_batch ON diff_record(batch_id);
 CREATE INDEX IF NOT EXISTS idx_event_ticket ON ticket_event(ticket_id);
 """

@@ -23,6 +23,7 @@ src/
 ├── requirements.txt        fastapi + uvicorn（仅此两项）
 ├── app/
 │   ├── main.py             路由、SSE、异常处理
+│   ├── agent_loop.py       Agent 循环：工具注册表 + 三个确认门
 │   ├── agent.py            核验 / 建单 / 提交 / 复核 + 凭证签名
 │   ├── retrieval.py        中文二元组分词 + BM25
 │   ├── llm.py              模型适配（mock / OpenAI 兼容）
@@ -31,10 +32,11 @@ src/
 │   ├── config.py           环境变量（都有默认值）
 │   ├── errors.py           统一错误体
 │   └── static/             单页前端（原生 HTML/JS，无构建步骤）
-└── tests/                  16 条接口级测试
+├── archive/                问答助手会话归档（json + csv + 生成脚本）
+└── tests/                  27 条接口级测试
 ```
 
-约 1,900 行（含前端与测试），依赖只有 FastAPI 与 uvicorn。
+约 2,300 行（含前端与测试），依赖只有 FastAPI 与 uvicorn。
 
 ## 两个功能
 
@@ -63,6 +65,27 @@ set LLM_MODEL=deepseek-chat
 
 选批次 → 选差异 → 核验 → 建单 → 提交复核 → 复核签核，每一步都落 `ticket_event`。
 
+## 3. Agent 代办（人工确认门）
+
+点「让 Agent 跑一遍」后，Agent 按剧本执行：查批次 → 列差异 → 核验，然后在**三个写操作前停下来等人确认**：
+
+| 门 | 动作 | 确认时要看的 | 不确认的后果 |
+|---|---|---|---|
+| G1 | 创建差错工单 | 差异编号、类型、金额、处理方式 | 不建单，差异保持 pending |
+| G2 | 提交复核 | 工单号、金额、当前状态 | 工单停在 created |
+| G3 | 复核签核 | 工单号、金额、状态 | 工单停在 submitted |
+
+![Agent 确认门](docs/preview-agent.png)
+
+设计上的三个约束：
+
+1. **只读步骤不打断**——查批次、列差异、核验直接执行，人只在写操作前被打断；
+2. **确认即带预览**——确认卡片上显示的就是即将写入的值（金额来自服务端重查，不是模型传的）；
+3. **拒绝即终止**——点「拒绝」，会话置为 `aborted`，不产生任何写入。
+
+循环实现见 `app/agent_loop.py`：工具注册表（`TOOLS`）+ 计划（`plan_for`）+ 状态机（`running / waiting_confirm / done / aborted`）。
+决策点只有 `plan_for(goal)` 一处，接真实模型时替换它即可。
+
 ## 三条防线（都有测试覆盖）
 
 | 防线 | 实现 | 测试 |
@@ -88,6 +111,9 @@ set LLM_MODEL=deepseek-chat
 | POST | `/api/tickets/{id}/submit` | 提交复核 |
 | POST | `/api/tickets/{id}/review` | 复核（`approve` 可退回），强制换人 |
 | GET | `/api/tickets` | 工单列表（含事件流） |
+| POST | `/api/agent/run` | 让 Agent 执行目标，遇到确认门即返回 |
+| POST | `/api/agent/{id}/confirm` | 确认或拒绝当前待办 |
+| GET | `/api/agent/{id}` | 读取 Agent 会话状态 |
 
 非流式接口统一返回 `{code, message, data, trace_id}`，`code=0` 为成功。
 错误码：`10400` 参数错误、`10401` 问题为空、`10404` 不存在、`10409` 状态冲突、`10403` 越权、`10501` 模型失败、`10502` 未就绪。
@@ -99,8 +125,13 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-16 条用例覆盖：健康检查、SSE 事件序列、检索兜底、核验通过与超窗拦截、凭证伪造、金额服务端重查、
-凭证一次性、同一差异不可重复建单、建单人不能复核、换人后复核通过、工单事件流。
+27 条用例，分两组：
+
+- `tests/test_api.py`（16 条）：健康检查、SSE 事件序列、检索兜底、核验通过与超窗拦截、凭证伪造、
+  金额服务端重查、凭证一次性、同一差异不可重复建单、建单人不能复核、换人后复核通过、工单事件流；
+- `tests/test_agent.py`（11 条）：计划里必须有 3 个确认门、只读目标不触发确认、运行在 G1 前停下
+  且不产生工单、确认后建单并进入 G2、拒绝即终止不写入、三连确认走完整链路、建单人复核被拒（403）、
+  无待办时确认返回 409、会话可回读、未知会话 404。
 
 ## 配置
 

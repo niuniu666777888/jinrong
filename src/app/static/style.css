@@ -159,3 +159,19 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 24px 40px; }
   .grid { grid-template-columns: 1fr; }
   .topbar { flex-wrap: wrap; gap: 10px; }
 }
+
+
+/* ---------- Agent ---------- */
+.agent-bar { display: flex; gap: 10px; margin-bottom: 8px; }
+.agent-bar input {
+  flex: 1; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 8px; font: inherit; outline: none;
+}
+.agent-bar input:focus { border-color: var(--primary); }
+.agent-bar button {
+  padding: 0 18px; border: 0; border-radius: 8px; background: var(--primary);
+  color: #fff; font-size: 13px; cursor: pointer;
+}
+.agent-bar button:disabled { opacity: .5; cursor: not-allowed; }
+#agent-log .ticket:first-child { padding-top: 10px; }
+#agent-pending .card { margin-top: 10px; border-color: #e8c9a8; background: #fffaf3; }

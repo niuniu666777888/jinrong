@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent, config, db, llm, retrieval, seed
+from . import agent, agent_loop, config, db, llm, retrieval, seed
 from .errors import (CODE_BAD_REQUEST, CODE_EMPTY_QUESTION, CODE_MODEL_FAIL,
                      CODE_NOT_READY, CODE_OK, CODE_RETRIEVE_FAIL, BizError,
                      body, ok)
@@ -101,6 +101,14 @@ class TicketIn(OperatorIn):
 
 class ReviewIn(OperatorIn):
     approve: bool = True
+
+
+class AgentIn(OperatorIn):
+    goal: str = Field(default="", max_length=200)
+
+
+class AgentConfirmIn(OperatorIn):
+    approved: bool = True
 
 
 def _operator(raw: str) -> str:
@@ -236,3 +244,23 @@ def review(ticket_id: str, payload: ReviewIn, request: Request):
 @app.get("/api/tickets")
 def tickets(request: Request):
     return ok(agent.list_tickets(), trace_of(request))
+
+
+# ---------------------------------------------------------------- Agent 循环
+@app.post("/api/agent/run")
+def agent_run(payload: AgentIn, request: Request):
+    goal = (payload.goal or "").strip()
+    if not goal:
+        raise BizError(CODE_BAD_REQUEST, "请输入目标", 400)
+    return ok(agent_loop.start(goal, _operator(payload.operator)), trace_of(request))
+
+
+@app.post("/api/agent/{run_id}/confirm")
+def agent_confirm(run_id: str, payload: AgentConfirmIn, request: Request):
+    return ok(agent_loop.confirm(run_id, _operator(payload.operator), payload.approved),
+              trace_of(request))
+
+
+@app.get("/api/agent/{run_id}")
+def agent_state(run_id: str, request: Request):
+    return ok(agent_loop.load(run_id), trace_of(request))

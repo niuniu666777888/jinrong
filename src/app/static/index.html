@@ -15,6 +15,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="qa">制度问答</button>
     <button class="tab" data-tab="diff">差错处理</button>
+    <button class="tab" data-tab="agent">Agent 代办</button>
   </nav>
   <label class="operator">
     当前操作人
@@ -69,6 +70,20 @@
       </div>
     </div>
   </section>
+
+  <!-- ================= Agent ================= -->
+  <section id="panel-agent" class="panel">
+    <div class="card">
+      <div class="agent-bar">
+        <input id="agent-goal" value="处理微信渠道的长款差异" spellcheck="false">
+        <button id="agent-run" class="primary">让 Agent 跑一遍</button>
+      </div>
+      <p class="status">Agent 会先做只读的查批次、列差异、核验；遇到写操作（建单 / 提交 / 复核）会停下来等你确认。</p>
+      <div id="agent-log"></div>
+      <div id="agent-pending"></div>
+    </div>
+  </section>
+
 </main>
 
 <div id="toast" class="toast"></div>

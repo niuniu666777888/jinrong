@@ -366,7 +366,79 @@ async function ticketAction(ticket, act) {
   } catch (err) { toast(err.message); }
 }
 
+
+/* ---------------- Agent 代办 ---------------- */
+const agentLog = () => $("#agent-log");
+const agentPending = () => $("#agent-pending");
+
+function renderAgent(state) {
+  const box = agentLog();
+  box.innerHTML = "";
+  (state.events || []).forEach((e) => {
+    const div = el("div", "ticket");
+    div.innerHTML = `<div class="ticket-head">
+        <span class="badge ${e.ok ? "ok" : "warn"}">${e.ok ? "完成" : "停止"}</span>
+        <span class="status">${e.tool}</span>
+      </div>`;
+    box.appendChild(div);
+  });
+
+  const p = state.pending;
+  if (!p) {
+    agentPending().innerHTML = `<p class="status">状态：${state.status}</p>`;
+    return;
+  }
+  const rows = Object.entries(p.preview || {})
+    .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  agentPending().innerHTML = `
+    <div class="card">
+      <div class="ticket-head">
+        <span class="badge warn">待确认</span>
+        <span class="status">${p.label}</span>
+      </div>
+      <dl class="kv">${rows}</dl>
+      <div class="actions">
+        <button id="agent-ok" class="primary">确认执行</button>
+        <button id="agent-no">拒绝</button>
+      </div>
+    </div>`;
+  $("#agent-ok").addEventListener("click", () => agentConfirm(state.run_id, true));
+  $("#agent-no").addEventListener("click", () => agentConfirm(state.run_id, false));
+}
+
+async function agentRun() {
+  const goal = $("#agent-goal").value.trim();
+  if (!goal) return;
+  $("#agent-run").disabled = true;
+  try {
+    const state = await api("/api/agent/run", {
+      method: "POST",
+      body: JSON.stringify({ goal, operator: state.operator }),
+    });
+    renderAgent(state);
+  } catch (err) { toast(err.message); }
+  finally { $("#agent-run").disabled = false; }
+}
+
+async function agentConfirm(runId, approved) {
+  try {
+    const state = await api(`/api/agent/${runId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ operator: state.operator, approved }),
+    });
+    renderAgent(state);
+    if (state.status === "done") { loadTickets(); loadBatches(); }
+  } catch (err) { toast(err.message); }
+}
+
+// 用事件委托绑定，避免面板重渲染后丢监听
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "agent-run") agentRun();
+});
+
 /* ---------------- 启动 ---------------- */
+
 loadHealth();
 loadTickets();
-if (location.hash === "#diff") activateTab("diff");
+const hashTab = location.hash.replace("#", "");
+if (["qa", "diff", "agent"].includes(hashTab)) activateTab(hashTab);
