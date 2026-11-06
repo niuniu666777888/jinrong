@@ -86,7 +86,7 @@ async def on_unhandled(request: Request, exc: Exception):
 
 # ---------------------------------------------------------------- 入参
 class ChatIn(BaseModel):
-    question: str = Field(default="", max_length=500)
+    question: str = Field(default="")
 
 
 class OperatorIn(BaseModel):
@@ -151,6 +151,8 @@ def chat(payload: ChatIn, request: Request):
     question = (payload.question or "").strip()
     if not question:
         raise BizError(CODE_EMPTY_QUESTION, "问题不能为空", 400)
+    if len(question) > 500:
+        raise BizError(CODE_EMPTY_QUESTION, "问题过长，请控制在 500 字以内", 400)
 
     trace_id = trace_of(request)
     started = time.time()

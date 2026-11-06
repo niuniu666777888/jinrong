@@ -61,6 +61,14 @@ def test_chat_rejects_empty_question(client):
     assert resp.json()["code"] == 10401
 
 
+def test_chat_rejects_too_long_question(client):
+    """超过 500 字走业务码 10401，与空问题保持同一套提示。"""
+    resp = client.post("/api/chat", json={"question": "长" * 501})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == 10401
+    assert "500" in resp.json()["message"]
+
+
 # ---------------------------------------------------------------- 差错：核验
 def test_verify_passes_and_issues_token(client):
     d = _data(client.post("/api/diffs/d_001/verify", json={"operator": A}))
