@@ -30,3 +30,6 @@ jobs:
 
       - name: Run tests (MVP)
         run: pytest src/tests
+
+      - name: Run tests (analysis)
+        run: pytest analysis/tests
