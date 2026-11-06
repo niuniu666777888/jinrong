@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>支付对账与差错追踪 · MVP</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>支付对账与差错追踪</h1>
+    <span class="sub" id="env">加载中…</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="qa">制度问答</button>
+    <button class="tab" data-tab="diff">差错处理</button>
+  </nav>
+  <label class="operator">
+    当前操作人
+    <select id="operator">
+      <option>唐映秋</option>
+      <option>傅景</option>
+      <option>顾明岚</option>
+    </select>
+  </label>
+</header>
+
+<main>
+  <!-- ================= 问答 ================= -->
+  <section id="panel-qa" class="panel active">
+    <div id="messages" class="messages">
+      <div class="empty" id="qa-empty">
+        <p>问点对账上的事</p>
+        <div class="chips">
+          <button class="chip">对账差错分哪几类？</button>
+          <button class="chip">长款和短款有什么区别？</button>
+          <button class="chip">手续费合并入账导致对不上怎么办？</button>
+        </div>
+      </div>
+    </div>
+    <form id="ask-form" class="composer">
+      <textarea id="question" rows="1" maxlength="500" placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
+      <button type="submit" id="ask-btn">发送</button>
+    </form>
+  </section>
+
+  <!-- ================= 差错 ================= -->
+  <section id="panel-diff" class="panel">
+    <div class="grid">
+      <div class="col">
+        <h2>批次</h2>
+        <table class="tbl" id="batch-table">
+          <thead><tr><th>渠道</th><th>结算日</th><th>笔数</th><th>金额</th><th>差异</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h2>差异</h2>
+        <table class="tbl" id="diff-table">
+          <thead><tr><th>类型</th><th>金额</th><th>渠道流水</th><th>状态</th></tr></thead>
+          <tbody><tr><td colspan="4" class="hint">先选一个批次</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="col">
+        <h2>差异详情</h2>
+        <div id="diff-detail" class="card empty-card">尚未选择差异</div>
+        <h2>工单</h2>
+        <div id="tickets" class="tickets empty-card">暂无工单</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
