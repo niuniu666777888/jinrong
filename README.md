@@ -4,6 +4,18 @@
 
 ![CI](https://github.com/niuniu666777888/jinrong/actions/workflows/ci.yml/badge.svg)
 
+## 仓库结构
+
+| 路径 | 内容 |
+|---|---|
+| `docs/` | 交付文档：六人访谈记录（`.md` / `.json` / `.csv`）、项目基本情报（4 份）、典型事件访谈（`.txt` 原始记录 + `.docx` 整理稿）、改造前 / 改造后两份流程图 |
+| `src/` | **最小可运行系统（MVP）**：制度问答 + 差错处理闭环，`python run.py` 一条命令启动，仅依赖 FastAPI 与 uvicorn |
+| `支付对账与差错追踪系统_交付/` | 完整交付版：FastAPI 服务、tkinter 桌面客户端、对账差错处理 Agent |
+| `tests/` | 交付版的 pytest 用例；`src/tests/` 为 MVP 用例 |
+| `.github/workflows/ci.yml` | push / PR 时分别运行两套测试 |
+
+两套代码的关系、启动方式与取舍，见 [`src/README.md`](src/README.md)；文档清单见 [`docs/README.md`](docs/README.md)。
+
 ## 项目解决什么问题
 
 支付运营每天要面对渠道账单与交易流水之间的逐笔匹配。跨日退款、手续费合并入账、渠道号/商户订单号口径不一致，都会造成匹配失败；差异需要人工定位、建单、复核、调整，链路长且容易漏。项目目标不是“让 AI 直接改钱”，而是：
