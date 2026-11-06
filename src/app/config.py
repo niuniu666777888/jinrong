@@ -38,3 +38,6 @@ LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
 SECRET = os.environ.get("MVP_SECRET") or secrets.token_hex(32)
 
 IS_DEMO_SECRET = not os.environ.get("MVP_SECRET")
+
+# 仅 HTTPS 时下发 Cookie（本地 http 调试保持 False）
+COOKIE_SECURE = os.environ.get("MVP_COOKIE_SECURE", "0") == "1"

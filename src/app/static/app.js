@@ -9,7 +9,7 @@ const el = (tag, cls, text) => {
 };
 
 const state = {
-  operator: localStorage.getItem("mvp.operator") || "唐映秋",
+  user: null,
   batchId: "",
   diff: null,
   token: "",
@@ -30,6 +30,7 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+  if (res.status === 401) { location.href = "/login"; throw new Error("登录已过期"); }
   const data = await res.json().catch(() => ({ code: -1, message: "响应不是 JSON" }));
   if (!res.ok || data.code !== 0) {
     throw new Error(data.message || `HTTP ${res.status}`);
@@ -61,13 +62,22 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
-/* ---------------- 操作人 ---------------- */
-const opSel = $("#operator");
-opSel.value = state.operator;
-opSel.addEventListener("change", () => {
-  state.operator = opSel.value;
-  localStorage.setItem("mvp.operator", state.operator);
-  renderTickets(state.tickets || []);
+/* ---------------- 当前用户 ---------------- */
+async function loadMe() {
+  const me = await fetch("/api/auth/me").then(async (r) => {
+    if (r.status === 401) { location.href = "/login"; throw new Error("未登录"); }
+    const b = await r.json();
+    if (b.code !== 0) throw new Error(b.message);
+    return b.data;
+  });
+  state.user = me;
+  $("#whoami").textContent = `${me.name}（${me.role === "admin" ? "风险岗" : "对账岗"}）`;
+  return me;
+}
+
+$("#logout").addEventListener("click", async () => {
+  await fetch("/api/auth/logout", { method: "POST" });
+  location.href = "/login";
 });
 
 /* ---------------- 问答 ---------------- */
@@ -253,10 +263,7 @@ async function doVerify() {
   btn.disabled = true;
   btn.textContent = "核验中…";
   try {
-    const r = await api(`/api/diffs/${state.diff.diff_id}/verify`, {
-      method: "POST",
-      body: JSON.stringify({ operator: state.operator }),
-    });
+    const r = await api(`/api/diffs/${state.diff.diff_id}/verify`, { method: "POST" });
     state.token = r.token || "";
     const issues = $("#diff-issues");
     issues.innerHTML = r.issues.length
@@ -292,7 +299,6 @@ async function doCreate() {
         diff_id: state.diff.diff_id,
         token: state.token,
         handling: $("#handling").value,
-        operator: state.operator,
       }),
     });
     toast(`已建单 ${ticket.ticket_no}`);
@@ -327,7 +333,7 @@ function renderTickets(list) {
   box.innerHTML = "";
   list.forEach((t) => {
     const div = el("div", "ticket");
-    const isCreator = t.created_by === state.operator;
+    const isCreator = state.user && t.created_by === state.user.name;
     div.innerHTML = `
       <div class="ticket-head">
         <span class="ticket-no">${t.ticket_no}</span>
@@ -351,14 +357,12 @@ function renderTickets(list) {
 async function ticketAction(ticket, act) {
   try {
     if (act === "submit") {
-      await api(`/api/tickets/${ticket.ticket_id}/submit`, {
-        method: "POST", body: JSON.stringify({ operator: state.operator }),
-      });
+      await api(`/api/tickets/${ticket.ticket_id}/submit`, { method: "POST" });
       toast("已提交复核");
     } else {
       await api(`/api/tickets/${ticket.ticket_id}/review`, {
         method: "POST",
-        body: JSON.stringify({ operator: state.operator, approve: act === "approve" }),
+        body: JSON.stringify({ approve: act === "approve" }),
       });
       toast(act === "approve" ? "复核通过" : "已退回");
     }
@@ -371,10 +375,10 @@ async function ticketAction(ticket, act) {
 const agentLog = () => $("#agent-log");
 const agentPending = () => $("#agent-pending");
 
-function renderAgent(state) {
+function renderAgent(run) {
   const box = agentLog();
   box.innerHTML = "";
-  (state.events || []).forEach((e) => {
+  (run.events || []).forEach((e) => {
     const div = el("div", "ticket");
     div.innerHTML = `<div class="ticket-head">
         <span class="badge ${e.ok ? "ok" : "warn"}">${e.ok ? "完成" : "停止"}</span>
@@ -383,9 +387,9 @@ function renderAgent(state) {
     box.appendChild(div);
   });
 
-  const p = state.pending;
+  const p = run.pending;
   if (!p) {
-    agentPending().innerHTML = `<p class="status">状态：${state.status}</p>`;
+    agentPending().innerHTML = `<p class="status">状态：${run.status}</p>`;
     return;
   }
   const rows = Object.entries(p.preview || {})
@@ -402,8 +406,8 @@ function renderAgent(state) {
         <button id="agent-no">拒绝</button>
       </div>
     </div>`;
-  $("#agent-ok").addEventListener("click", () => agentConfirm(state.run_id, true));
-  $("#agent-no").addEventListener("click", () => agentConfirm(state.run_id, false));
+  $("#agent-ok").addEventListener("click", () => agentConfirm(run.run_id, true));
+  $("#agent-no").addEventListener("click", () => agentConfirm(run.run_id, false));
 }
 
 async function agentRun() {
@@ -411,23 +415,23 @@ async function agentRun() {
   if (!goal) return;
   $("#agent-run").disabled = true;
   try {
-    const state = await api("/api/agent/run", {
+    const run = await api("/api/agent/run", {
       method: "POST",
-      body: JSON.stringify({ goal, operator: state.operator }),
+      body: JSON.stringify({ goal }),
     });
-    renderAgent(state);
+    renderAgent(run);
   } catch (err) { toast(err.message); }
   finally { $("#agent-run").disabled = false; }
 }
 
 async function agentConfirm(runId, approved) {
   try {
-    const state = await api(`/api/agent/${runId}/confirm`, {
+    const run = await api(`/api/agent/${runId}/confirm`, {
       method: "POST",
-      body: JSON.stringify({ operator: state.operator, approved }),
+      body: JSON.stringify({ approved }),
     });
-    renderAgent(state);
-    if (state.status === "done") { loadTickets(); loadBatches(); }
+    renderAgent(run);
+    if (run.status === "done") { loadTickets(); loadBatches(); }
   } catch (err) { toast(err.message); }
 }
 
@@ -438,7 +442,6 @@ document.addEventListener("click", (e) => {
 
 /* ---------------- 启动 ---------------- */
 
-loadHealth();
-loadTickets();
+loadMe().then(() => { loadHealth(); loadTickets(); }).catch(() => {});
 const hashTab = location.hash.replace("#", "");
 if (["qa", "diff", "agent"].includes(hashTab)) activateTab(hashTab);

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · 支付对账与差错追踪</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+<main class="login-card">
+  <h1>支付对账与差错追踪</h1>
+  <p class="sub">对账差错处理 · 最小可运行系统</p>
+
+  <form id="login-form">
+    <label>工号 / 账号
+      <input id="employee_no" autocomplete="username" placeholder="employee01 或 admin" required>
+    </label>
+    <label>密码
+      <input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+    </label>
+    <button type="submit" id="login-btn">登录</button>
+    <p class="err" id="login-err"></p>
+  </form>
+
+  <div class="demo">
+    <p>演示账号</p>
+    <ul>
+      <li><b>employee01</b> / emp123 —— 唐映秋 · 对账会计（可核验、建单、提交）</li>
+      <li><b>admin</b> / admin123 —— 傅景 · 资金风险经理（可复核签核）</li>
+    </ul>
+    <p class="hint">复核必须换人：用 employee01 建单，换个账号登录才能复核。</p>
+  </div>
+</main>
+
+<script>
+const form = document.getElementById("login-form");
+const err = document.getElementById("login-err");
+const btn = document.getElementById("login-btn");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  err.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "登录中…";
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employee_no: document.getElementById("employee_no").value.trim(),
+        password: document.getElementById("password").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.code !== 0) throw new Error(data.message || "登录失败");
+    location.href = "/";
+  } catch (e2) {
+    err.textContent = e2.message;
+    btn.disabled = false;
+    btn.textContent = "登录";
+  }
+});
+</script>
+</body>
+</html>

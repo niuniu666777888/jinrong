@@ -14,6 +14,15 @@ from typing import Any, Dict, Iterable, List, Optional
 from . import config
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS app_user (
+  id           TEXT PRIMARY KEY,
+  employee_no  TEXT NOT NULL UNIQUE,
+  name         TEXT NOT NULL,
+  role         TEXT NOT NULL,          -- employee / admin（admin 具备复核权）
+  password_hash TEXT NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS policy (
   id          TEXT PRIMARY KEY,
   doc         TEXT NOT NULL,

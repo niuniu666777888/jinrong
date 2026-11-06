@@ -1,6 +1,6 @@
-"""FastAPI 应用：检索问答（SSE）+ 差错处理闭环。
+"""FastAPI 应用：登录、检索问答（SSE）、差错处理闭环、Agent 代办。
 
-启动即建库、灌种子、建索引；不配任何环境变量也能跑。
+启动即建库、灌种子、建索引；不配任何环境变量也能跑（默认两个演示账号）。
 """
 
 import json
@@ -9,18 +9,17 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent, agent_loop, config, db, llm, retrieval, seed
+from . import agent, agent_loop, auth, config, db, llm, retrieval, seed
 from .errors import (CODE_BAD_REQUEST, CODE_EMPTY_QUESTION, CODE_MODEL_FAIL,
-                     CODE_NOT_READY, CODE_OK, CODE_RETRIEVE_FAIL, BizError,
-                     body, ok)
+                     CODE_NOT_READY, CODE_RETRIEVE_FAIL, BizError, body, ok)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATE: Dict[str, Any] = {"ready": False, "policy_count": 0}
@@ -30,6 +29,7 @@ STATE: Dict[str, Any] = {"ready": False, "policy_count": 0}
 def bootstrap() -> None:
     db.init_db()
     seed.seed()
+    seed.seed_users()
     rows = db.q("SELECT id, clause_no, title, content FROM policy ORDER BY clause_no")
     retrieval.build(rows)
     STATE["policy_count"] = len(rows)
@@ -40,13 +40,13 @@ def bootstrap() -> None:
 async def lifespan(app: FastAPI):
     bootstrap()
     if config.IS_DEMO_SECRET:
-        print("[提示] 未设置 MVP_SECRET，本次启动使用随机签名密钥；重启后旧核验凭证失效。")
+        print("[提示] 未设置 MVP_SECRET，本次启动使用随机签名密钥；重启后登录态与核验凭证都会失效。")
     print(f"[启动] 制度条款 {STATE['policy_count']} 条 · 模型 {llm.provider_name()} · "
           f"数据库 {config.DB_PATH}")
     yield
 
 
-app = FastAPI(title="支付对账与差错追踪 MVP", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="支付对账与差错追踪 MVP", version="0.2.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------- 异常
@@ -89,42 +89,74 @@ class ChatIn(BaseModel):
     question: str = Field(default="")
 
 
-class OperatorIn(BaseModel):
-    operator: str = Field(default="", max_length=32)
+class LoginIn(BaseModel):
+    employee_no: str = Field(default="", max_length=32)
+    password: str = Field(default="", max_length=128)
 
 
-class TicketIn(OperatorIn):
+class TicketIn(BaseModel):
     diff_id: str = Field(default="", max_length=32)
     token: str = Field(default="", max_length=512)
     handling: str = Field(default="", max_length=16)
 
 
-class ReviewIn(OperatorIn):
+class ReviewIn(BaseModel):
     approve: bool = True
 
 
-class AgentIn(OperatorIn):
+class AgentIn(BaseModel):
     goal: str = Field(default="", max_length=200)
 
 
-class AgentConfirmIn(OperatorIn):
+class AgentConfirmIn(BaseModel):
     approved: bool = True
 
 
-def _operator(raw: str) -> str:
-    name = (raw or "").strip()
-    if not name:
-        raise BizError(CODE_BAD_REQUEST, "缺少操作人", 400)
-    return name
+def _public(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {"user_id": user["id"], "employee_no": user["employee_no"],
+            "name": user["name"], "role": user["role"]}
 
 
 # ---------------------------------------------------------------- 页面
 @app.get("/")
-def index():
+def index(request: Request):
+    if not auth.current_user(request):
+        return RedirectResponse("/login", status_code=302)
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/login")
+def login_page(request: Request):
+    if auth.current_user(request):
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(STATIC_DIR / "login.html")
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# ---------------------------------------------------------------- 认证
+@app.post("/api/auth/login")
+def api_login(payload: LoginIn, request: Request):
+    user = auth.login(payload.employee_no, payload.password)
+    response = JSONResponse(content=ok(_public(user), trace_of(request)))
+    response.set_cookie(auth.COOKIE_NAME, auth.issue(user["id"]),
+                        max_age=auth.TOKEN_TTL, httponly=True, samesite="lax",
+                        secure=config.COOKIE_SECURE, path="/")
+    return response
+
+
+@app.post("/api/auth/logout")
+def api_logout(request: Request):
+    response = JSONResponse(content=ok(None, trace_of(request)))
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    return response
+
+
+@app.get("/api/auth/me")
+def api_me(request: Request):
+    user = auth.require_login(request)
+    return ok(_public(user), trace_of(request))
 
 
 # ---------------------------------------------------------------- 健康检查
@@ -145,6 +177,7 @@ def sse(event: str, data: Dict[str, Any]) -> str:
 
 @app.post("/api/chat")
 def chat(payload: ChatIn, request: Request):
+    auth.require_login(request)
     if not STATE["ready"]:
         raise BizError(CODE_NOT_READY, "知识库尚未就绪", 503)
 
@@ -195,7 +228,7 @@ def chat(payload: ChatIn, request: Request):
 
             yield sse("done", {"elapsed_ms": int((time.time() - started) * 1000),
                                "degraded": False})
-        except GeneratorExit:          # 客户端断开
+        except GeneratorExit:
             raise
 
     return StreamingResponse(stream(), media_type="text/event-stream",
@@ -205,6 +238,7 @@ def chat(payload: ChatIn, request: Request):
 
 @app.get("/api/policies")
 def policies(request: Request):
+    auth.require_login(request)
     rows = db.q("SELECT id, clause_no, title, content FROM policy ORDER BY clause_no")
     return ok(rows, trace_of(request))
 
@@ -212,57 +246,67 @@ def policies(request: Request):
 # ---------------------------------------------------------------- 对账与差错
 @app.get("/api/batches")
 def batches(request: Request):
+    auth.require_login(request)
     return ok(agent.list_batches(), trace_of(request))
 
 
 @app.get("/api/diffs")
 def diffs(request: Request, batch_id: str = ""):
+    auth.require_login(request)
     return ok(agent.list_diffs(batch_id), trace_of(request))
 
 
 @app.post("/api/diffs/{diff_id}/verify")
-def verify(diff_id: str, payload: OperatorIn, request: Request):
-    return ok(agent.verify_diff(diff_id, _operator(payload.operator)), trace_of(request))
+def verify(diff_id: str, request: Request):
+    user = auth.require_login(request)
+    return ok(agent.verify_diff(diff_id, user["name"]), trace_of(request))
 
 
 @app.post("/api/tickets")
 def create_ticket(payload: TicketIn, request: Request):
+    user = auth.require_login(request)
     return ok(agent.create_ticket(payload.diff_id, payload.token,
-                                  payload.handling, _operator(payload.operator)),
-              trace_of(request))
+                                  payload.handling, user["name"]), trace_of(request))
 
 
 @app.post("/api/tickets/{ticket_id}/submit")
-def submit(ticket_id: str, payload: OperatorIn, request: Request):
-    return ok(agent.submit_ticket(ticket_id, _operator(payload.operator)), trace_of(request))
+def submit(ticket_id: str, request: Request):
+    user = auth.require_login(request)
+    return ok(agent.submit_ticket(ticket_id, user["name"]), trace_of(request))
 
 
 @app.post("/api/tickets/{ticket_id}/review")
 def review(ticket_id: str, payload: ReviewIn, request: Request):
-    return ok(agent.review_ticket(ticket_id, _operator(payload.operator), payload.approve),
+    user = auth.require_login(request)
+    auth.require_role(user, "admin")          # 复核权：只有风险岗（admin）具备
+    return ok(agent.review_ticket(ticket_id, user["name"], payload.approve),
               trace_of(request))
 
 
 @app.get("/api/tickets")
 def tickets(request: Request):
+    auth.require_login(request)
     return ok(agent.list_tickets(), trace_of(request))
 
 
 # ---------------------------------------------------------------- Agent 循环
 @app.post("/api/agent/run")
 def agent_run(payload: AgentIn, request: Request):
+    user = auth.require_login(request)
     goal = (payload.goal or "").strip()
     if not goal:
         raise BizError(CODE_BAD_REQUEST, "请输入目标", 400)
-    return ok(agent_loop.start(goal, _operator(payload.operator)), trace_of(request))
+    return ok(agent_loop.start(goal, user["name"]), trace_of(request))
 
 
 @app.post("/api/agent/{run_id}/confirm")
 def agent_confirm(run_id: str, payload: AgentConfirmIn, request: Request):
-    return ok(agent_loop.confirm(run_id, _operator(payload.operator), payload.approved),
+    user = auth.require_login(request)
+    return ok(agent_loop.confirm(run_id, user["name"], payload.approved),
               trace_of(request))
 
 
 @app.get("/api/agent/{run_id}")
 def agent_state(run_id: str, request: Request):
+    auth.require_login(request)
     return ok(agent_loop.load(run_id), trace_of(request))

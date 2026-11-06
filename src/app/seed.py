@@ -94,6 +94,34 @@ DIFFS = [
 ]
 
 
+# 两个演示账号：员工只能建单/提交，管理员才能复核
+USERS = [
+    {"employee_no": "employee01", "name": "唐映秋", "role": "employee",
+     "env": "EMPLOYEE_INIT_PASSWORD", "default": "emp123"},
+    {"employee_no": "admin", "name": "傅景", "role": "admin",
+     "env": "ADMIN_INIT_PASSWORD", "default": "admin123"},
+]
+
+
+def seed_users() -> None:
+    """幂等：只在用户表为空时创建，密码可用环境变量覆盖。"""
+    import os as _os
+
+    from .auth import hash_password
+
+    if db.q1("SELECT COUNT(*) AS n FROM app_user")["n"] > 0:
+        return
+    for u in USERS:
+        pwd = _os.environ.get(u["env"]) or u["default"]
+        db.execute(
+            "INSERT INTO app_user (id, employee_no, name, role, password_hash, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (db.new_id("u"), u["employee_no"], u["name"], u["role"],
+             hash_password(pwd), db.now_ms()),
+        )
+        print(f"[初始化] 账号 {u['employee_no']} / {pwd}（{u['name']}·{u['role']}）")
+
+
 def is_empty() -> bool:
     return db.q1("SELECT COUNT(*) AS n FROM policy")["n"] == 0
 

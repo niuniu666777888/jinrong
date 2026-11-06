@@ -175,3 +175,42 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 24px 40px; }
 .agent-bar button:disabled { opacity: .5; cursor: not-allowed; }
 #agent-log .ticket:first-child { padding-top: 10px; }
 #agent-pending .card { margin-top: 10px; border-color: #e8c9a8; background: #fffaf3; }
+
+
+/* ---------- 顶栏用户 ---------- */
+.operator { display: flex; align-items: center; gap: 10px; margin-left: auto; font-size: 12px; color: var(--muted); }
+.operator #whoami { color: var(--ink); font-size: 13px; }
+button.link {
+  border: 0; background: transparent; color: var(--primary);
+  font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+}
+button.link:hover { background: var(--primary-soft); }
+
+/* ---------- 登录页 ---------- */
+.login-body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; margin: 0;
+}
+.login-card {
+  width: 420px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 30px 32px 24px; box-shadow: 0 8px 30px rgba(31,56,100,.06);
+}
+.login-card h1 { font-size: 18px; margin: 0 0 4px; }
+.login-card .sub { color: var(--muted); font-size: 12px; margin: 0 0 20px; }
+.login-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.login-card input {
+  width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 8px; font: inherit; outline: none;
+}
+.login-card input:focus { border-color: var(--primary); }
+.login-card button {
+  width: 100%; padding: 11px; border: 0; border-radius: 8px; background: var(--primary);
+  color: #fff; font-size: 14px; cursor: pointer; margin-top: 4px;
+}
+.login-card button:disabled { opacity: .55; }
+.login-card .err { color: var(--err); font-size: 12px; min-height: 18px; margin: 10px 0 0; }
+.demo { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 12px; color: var(--muted); }
+.demo p { margin: 0 0 6px; }
+.demo ul { margin: 0 0 8px; padding-left: 18px; }
+.demo li { margin: 3px 0; }
+.demo .hint { color: var(--warn); }
