@@ -23,5 +23,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run tests
+      # 两套测试分开跑：它们各自有一个名为 app 的模块（交付版 webapp/app.py 与
+      # src/app/），同一进程里同时 import 会互相覆盖，必须分进程执行。
+      - name: Run tests (delivery)
         run: pytest
+
+      - name: Run tests (MVP)
+        run: pytest src/tests
